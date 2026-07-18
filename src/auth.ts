@@ -214,7 +214,8 @@ async function refreshAccessToken(config: AccountConfig, refreshToken: string): 
   );
   return {
     access_token: data.access_token,
-    refresh_token: data.refresh_token,
+    // OAuth servers may omit refresh_token when they do not rotate it.
+    refresh_token: data.refresh_token ?? refreshToken,
     expires_at: Date.now() + (data.expires_in - 60) * 1000,
     scope: data.scope,
   };
@@ -222,8 +223,8 @@ async function refreshAccessToken(config: AccountConfig, refreshToken: string): 
 
 // ─── public API ─────────────────────────────────────────────────────
 
-/** Serialises concurrent refresh attempts so only one runs at a time. */
-let refreshLock: Promise<string> | null = null;
+/** Serialises refresh attempts per account without mixing tokens across accounts. */
+const refreshLocks = new Map<string, Promise<string>>();
 
 /**
  * Get a valid access token (auto-refresh if expired or within 5 min of expiry).
@@ -244,10 +245,12 @@ export async function getAccessToken(accountName?: string): Promise<string> {
   }
 
   // Serialise refresh — if another caller is already refreshing, wait for it
+  let refreshLock = refreshLocks.get(config.tokenPath);
   if (!refreshLock) {
     refreshLock = doRefresh(config, tokens.refresh_token).finally(() => {
-      refreshLock = null;
+      refreshLocks.delete(config.tokenPath);
     });
+    refreshLocks.set(config.tokenPath, refreshLock);
   }
   return refreshLock;
 }

@@ -13,6 +13,16 @@ const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 const MAX_RETRIES = 4;
 const RETRY_BACKOFF_MS = 1000;
 
+function retryDelayMs(retryAfter: string | null, fallbackMs: number): number {
+  if (!retryAfter) return fallbackMs;
+
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+
+  const retryAt = Date.parse(retryAfter);
+  return Number.isNaN(retryAt) ? fallbackMs : Math.max(0, retryAt - Date.now());
+}
+
 export class GraphClient {
   timezone: string;
 
@@ -30,6 +40,9 @@ export class GraphClient {
   ): Promise<T> {
     const token = await getAccessToken(this.accountName);
     const url = path.startsWith("https://") ? path : `${GRAPH_BASE}${path}`;
+    if (new URL(url).origin !== new URL(GRAPH_BASE).origin) {
+      throw new Error("Graph API request URL must use graph.microsoft.com");
+    }
 
     let attempt = 0;
     let delay = RETRY_BACKOFF_MS;
@@ -41,16 +54,26 @@ export class GraphClient {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           Accept: "application/json",
+          Prefer: `outlook.timezone="${this.timezone}"`,
         },
       };
       if (body && method !== "GET") {
         opts.body = JSON.stringify(body);
       }
 
-      const resp = await fetch(url, opts);
+      let resp: Response;
+      try {
+        resp = await fetch(url, opts);
+      } catch (error) {
+        if (attempt >= MAX_RETRIES) throw error;
+        await new Promise((r) => setTimeout(r, delay));
+        attempt++;
+        delay *= 2;
+        continue;
+      }
 
       // 204 No Content
-      if (resp.status === 204) return { success: true } as unknown as T;
+      if (resp.status === 204) return undefined as T;
 
       // Rate-limited — retry with Retry-After header or exponential backoff
       if (resp.status === 429) {
@@ -58,9 +81,7 @@ export class GraphClient {
           throw new Error(`Rate limited after ${MAX_RETRIES} retries`);
         }
         const retryAfter = resp.headers.get("Retry-After");
-        const waitMs = retryAfter
-          ? parseInt(retryAfter, 10) * 1000
-          : delay;
+        const waitMs = retryDelayMs(retryAfter, delay);
         await new Promise((r) => setTimeout(r, waitMs));
         attempt++;
         delay *= 2;
@@ -87,6 +108,9 @@ export class GraphClient {
       try {
         parsed = await resp.json();
       } catch {
+        // Graph action endpoints such as sendMail commonly return 202 with
+        // an empty body. A successful empty response is not an error.
+        if (resp.ok) return undefined as T;
         throw new Error(`Graph API ${resp.status}: unable to parse response`);
       }
 
@@ -109,15 +133,15 @@ export class GraphClient {
   }
 
   /** GET that follows @odata.nextLink pagination, collecting all results */
-  async getAll<T>(path: string, maxPages = 10): Promise<T[]> {
+  async getAll<T>(path: string, maxPages = 10, maxItems = Infinity): Promise<T[]> {
     const results: T[] = [];
     let url: string | undefined = path;
     let pages = 0;
 
-    while (url && pages < maxPages) {
+    while (url && pages < maxPages && results.length < maxItems) {
       // If url is a nextLink, it's already absolute
       const data: GraphListResponse<T> = await this.request<GraphListResponse<T>>(url);
-      if (data.value) results.push(...data.value);
+      if (data.value) results.push(...data.value.slice(0, maxItems - results.length));
       url = data["@odata.nextLink"];
       pages++;
     }
@@ -167,7 +191,7 @@ export class GraphClient {
 
       if (resp.status === 429 && attempt < MAX_RETRIES) {
         const retryAfter = resp.headers.get("Retry-After");
-        await new Promise((r) => setTimeout(r, retryAfter ? parseInt(retryAfter, 10) * 1000 : delay));
+        await new Promise((r) => setTimeout(r, retryDelayMs(retryAfter, delay)));
         attempt++;
         delay *= 2;
         continue;
