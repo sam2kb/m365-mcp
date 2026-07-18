@@ -1,0 +1,126 @@
+name: CI and Release
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  verify:
+    name: Test and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ "$package_version" != "$tag_version" ]]; then
+            echo "::error::Tag v$tag_version does not match package version $package_version"
+            exit 1
+          fi
+
+      - name: Inspect npm package
+        run: npm pack --dry-run --json
+
+  publish-npm:
+    name: Publish npm
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish npm package
+        run: npm publish
+
+  publish-clawhub:
+    name: Publish ClawHub
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Configure ClawHub authentication
+        env:
+          CLAWHUB_CONFIG_PATH: ${{ runner.temp }}/clawhub-config.json
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+        run: >-
+          node -e
+          'require("node:fs").writeFileSync(process.env.CLAWHUB_CONFIG_PATH,
+          JSON.stringify({registry:"https://clawhub.ai",token:process.env.CLAWHUB_TOKEN}))';
+          echo "CLAWHUB_CONFIG_PATH=$CLAWHUB_CONFIG_PATH" >> "$GITHUB_ENV"
+
+      - name: Publish ClawHub skill
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          npx --yes clawhub@0.23.1 skill publish . \
+            --slug m365-mcp \
+            --name "m365-mcp" \
+            --owner sam2kb \
+            --version "$package_version" \
+            --changelog "Release ${GITHUB_REF_NAME}" \
+            --tags latest \
+            --topics "microsoft-365,mcp,outlook,teams,onedrive" \
+            --source-repo "https://github.com/${GITHUB_REPOSITORY}" \
+            --source-commit "${GITHUB_SHA}" \
+            --source-ref "${GITHUB_REF}" \
+            --json
