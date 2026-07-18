@@ -1,0 +1,3 @@
+src/
+vitest.config.ts
+dist/__tests__/
