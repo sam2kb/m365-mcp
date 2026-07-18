@@ -105,7 +105,7 @@ async function main() {
       }
 
       case "env": {
-        // Dump env vars needed for OpenClaw setup instructions
+        // Dump environment variables for MCP client setup instructions
         const { accounts } = listAccounts();
         if (accounts.length === 0) {
           console.log("# No accounts configured.");

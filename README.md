@@ -98,11 +98,11 @@ node dist/auth-cli.js add work <tenant-id> <client-id> you@company.com "Work acc
 node dist/auth-cli.js login --account=work
 ```
 
-Follow the on-screen URL + code to sign in. Token stored securely at `~/.openclaw/auth/m365-mcp/`.
+Follow the on-screen URL + code to sign in. Tokens are stored securely in `~/.m365-mcp/auth/` by default. Set `M365_MCP_AUTH_DIR` to use another location.
 
-### 6. Configure OpenClaw (mcporter)
+### 5. Configure an MCP Client
 
-Add to your mcporter config:
+The server uses standard MCP over stdio. For example, add it to an OpenClaw mcporter config:
 
 ```json
 {
@@ -227,7 +227,7 @@ npm run build  # compile TypeScript
 
 - **Delegated OAuth** — app acts as the authenticated user. No tenant-wide access.
 - **Device code flow** — you never type your password into anything but Microsoft's login page.
-- **Tokens stored with 0600 permissions** in `~/.openclaw/auth/m365-mcp/`.
+- **Tokens stored with 0600 permissions** in `~/.m365-mcp/auth/` by default, configurable with `M365_MCP_AUTH_DIR`.
 - **Auto-refresh** — tokens refreshed before expiry, expired refresh tokens trigger re-auth.
 - **No telemetry, no analytics, no third-party calls** besides `login.microsoftonline.com` and `graph.microsoft.com`.
 

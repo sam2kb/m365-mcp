@@ -29,6 +29,7 @@ vi.mock("node:os", () => ({
 }));
 
 import {
+  resolveAuthDir,
   ensureDirs,
   loadAccounts,
   addAccount,
@@ -46,7 +47,7 @@ import type { AccountConfig } from "../types.js";
 // ─── helpers ────────────────────────────────────────────────────────
 
 function seedTokens(accountName: string, tokens: { access_token: string; refresh_token: string; expires_at: number; scope: string }) {
-  const tokenPath = `/home/testuser/.openclaw/auth/m365-mcp/tokens/${accountName}.json`;
+  const tokenPath = `/home/testuser/.m365-mcp/auth/tokens/${accountName}.json`;
   fsState.set(tokenPath, JSON.stringify(tokens));
 }
 
@@ -164,13 +165,13 @@ describe("auth", () => {
         tenantId: "t1",
         clientId: "c1",
         addedAt: new Date().toISOString(),
-        tokenPath: "/home/testuser/.openclaw/auth/m365-mcp/tokens/test.json",
+        tokenPath: "/home/testuser/.m365-mcp/auth/tokens/test.json",
       };
       expect(loadTokens(cfg)).toBeNull();
     });
 
     it("loadTokens returns null when JSON is invalid", () => {
-      const tokenPath = "/home/testuser/.openclaw/auth/m365-mcp/tokens/bad.json";
+      const tokenPath = "/home/testuser/.m365-mcp/auth/tokens/bad.json";
       fsState.set(tokenPath, "not json");
       const cfg: AccountConfig = {
         name: "bad",
@@ -183,7 +184,7 @@ describe("auth", () => {
     });
 
     it("loadTokens returns null when missing required fields", () => {
-      const tokenPath = "/home/testuser/.openclaw/auth/m365-mcp/tokens/partial.json";
+      const tokenPath = "/home/testuser/.m365-mcp/auth/tokens/partial.json";
       fsState.set(tokenPath, JSON.stringify({ access_token: "at" }));
       const cfg: AccountConfig = {
         name: "partial",
@@ -196,7 +197,7 @@ describe("auth", () => {
     });
 
     it("loadTokens returns parsed tokens", () => {
-      const tokenPath = "/home/testuser/.openclaw/auth/m365-mcp/tokens/valid.json";
+      const tokenPath = "/home/testuser/.m365-mcp/auth/tokens/valid.json";
       const data = { access_token: "at", refresh_token: "rt", expires_at: Date.now() + 99999, scope: "openid" };
       fsState.set(tokenPath, JSON.stringify(data));
       const cfg: AccountConfig = {
@@ -289,12 +290,22 @@ describe("auth", () => {
     });
   });
 
+  describe("resolveAuthDir", () => {
+    it("uses a client-neutral default under the home directory", () => {
+      expect(resolveAuthDir({}, "/home/testuser")).toBe("/home/testuser/.m365-mcp/auth");
+    });
+
+    it("honors M365_MCP_AUTH_DIR", () => {
+      expect(resolveAuthDir({ M365_MCP_AUTH_DIR: "/srv/m365-auth" }, "/unused")).toBe("/srv/m365-auth");
+    });
+  });
+
   // ── getTokenPath ─────────────────────────────────────────────────
 
   describe("getTokenPath", () => {
     it("returns path under tokens dir", () => {
       const p = getTokenPath("myaccount");
-      expect(p).toBe("/home/testuser/.openclaw/auth/m365-mcp/tokens/myaccount.json");
+      expect(p).toBe("/home/testuser/.m365-mcp/auth/tokens/myaccount.json");
     });
   });
 });

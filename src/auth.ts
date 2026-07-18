@@ -2,7 +2,7 @@
  * OAuth 2.0 Device Code Flow + Multi-Account Token Management
  *
  * Uses delegated permissions — the app acts AS YOU, not as the tenant.
- * Tokens stored in ~/.openclaw/auth/m365-mcp/ with 0600 permissions.
+ * Tokens stored in ~/.m365-mcp/auth/ by default with 0600 permissions.
  */
 
 import * as fs from "node:fs";
@@ -10,7 +10,15 @@ import * as path from "node:path";
 import * as os from "node:os";
 import type { AccountConfig, AccountsStore, TokenData } from "./types.js";
 
-const AUTH_DIR = path.join(os.homedir(), ".openclaw", "auth", "m365-mcp");
+export function resolveAuthDir(
+  env: NodeJS.ProcessEnv = process.env,
+  homeDir = os.homedir()
+): string {
+  const configuredDir = env.M365_MCP_AUTH_DIR?.trim();
+  return configuredDir ? path.resolve(configuredDir) : path.join(homeDir, ".m365-mcp", "auth");
+}
+
+const AUTH_DIR = resolveAuthDir();
 const ACCOUNTS_PATH = path.join(AUTH_DIR, "accounts.json");
 const TOKENS_DIR = path.join(AUTH_DIR, "tokens");
 
