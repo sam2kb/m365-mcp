@@ -1,6 +1,19 @@
 ---
 name: m365-mcp
 description: Production-grade Microsoft 365 MCP server with delegated OAuth, multi-account support, pagination, rate limiting, and 38 tools covering email, calendar, contacts, OneDrive, Teams, tasks, and users.
+metadata:
+  openclaw:
+    homepage: https://github.com/sam2kb/m365-mcp#readme
+    requires:
+      bins:
+        - m365-mcp
+        - m365-mcp-auth
+    install:
+      - kind: node
+        package: "@sam2kb/m365-mcp"
+        bins:
+          - m365-mcp
+          - m365-mcp-auth
 ---
 
 # m365-mcp
@@ -16,44 +29,47 @@ Production-grade Microsoft 365 MCP server combining the best of office365-connec
 ## Capabilities
 
 ### Email (9 tools)
+
 - List, read, send, reply, search, move, delete, mark read/unread, list folders
 
 ### Calendar (7 tools)
+
 - List events, today view, week view, create (with Teams meeting), update, delete, free/busy
 
 ### Contacts (6 tools)
+
 - List, search, read, create, update, delete
 
 ### OneDrive (5 tools)
+
 - List files, search, read content, metadata, create folders
 
 ### Teams (3 tools)
+
 - List chats, read messages, send messages
 
 ### Tasks (5 tools)
+
 - List lists, list tasks, create, update, delete
 
 ### Users (3 tools)
+
 - List org users, profile lookup, manager lookup
 
 ## Setup
 
+ClawHub installs the prebuilt npm package automatically. For a manual install:
+
 ```bash
-cd m365-mcp
-npm install
-npm run build
+npm install --global @sam2kb/m365-mcp
 
 # Add account
-node dist/auth-cli.js add work <tenantId> <clientId> you@company.com
+m365-mcp-auth add work <tenantId> <clientId> you@company.com
 
 # Authenticate
-node dist/auth-cli.js login --account=work
+m365-mcp-auth login --account=work
 ```
 
-Then configure as an MCP server in your mcporter config.
+Then configure `m365-mcp` as a stdio MCP server in your client.
 
-See [README.md](README.md) for full Azure setup guide.
-
-## License
-
-MIT
+See the [project README](https://github.com/sam2kb/m365-mcp#readme) for the full Azure setup guide.

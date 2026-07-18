@@ -1,15 +1,24 @@
 {
   "name": "@sam2kb/m365-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Production-grade Microsoft 365 MCP server — email, calendar, contacts, OneDrive, Teams, tasks, and users via delegated OAuth",
   "type": "module",
   "main": "dist/index.js",
+  "files": [
+    "dist",
+    ".env.example",
+    "LICENSE",
+    "README.md",
+    "SKILL.md"
+  ],
   "bin": {
     "m365-mcp": "dist/index.js",
     "m365-mcp-auth": "dist/auth-cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc",
+    "prepack": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "auth": "tsx src/auth-cli.ts",
