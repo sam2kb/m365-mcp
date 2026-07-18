@@ -44,7 +44,7 @@ export function registerTeamsTools(client: GraphClient) {
     async teams_send(args: { chatId: string; message: string }): Promise<string> {
       const data = await client.post<any>(
         `${user}/chats/${args.chatId}/messages`,
-        { body: { content: args.message } }
+        { body: { contentType: "text", content: args.message } }
       );
       return JSON.stringify({ id: data.id, success: true }, null, 2);
     },
