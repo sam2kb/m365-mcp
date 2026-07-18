@@ -102,7 +102,11 @@ Follow the on-screen URL + code to sign in. Tokens are stored securely in `~/.m3
 
 ### 5. Configure an MCP Client
 
-The server uses standard MCP over stdio. For example, add it to an OpenClaw mcporter config:
+The server uses standard MCP over stdio and works with any MCP client (Claude Desktop, Cursor, Continue, etc.).
+
+#### OpenClaw
+
+Add to your mcporter config at `~/.openclaw/mcporter.json`:
 
 ```json
 {
@@ -119,13 +123,19 @@ The server uses standard MCP over stdio. For example, add it to an OpenClaw mcpo
 }
 ```
 
-Or via CLI:
+Or via mcporter CLI:
 
 ```bash
-mcporter config add m365 --stdio "node /path/to/m365-mcp/dist/index.js" \
+mcporter config add m365 --stdio "node /absolute/path/to/m365-mcp/dist/index.js" \
   --env M365_ACCOUNT=work \
   --env M365_TIMEZONE=America/Chicago
 ```
+
+Then restart OpenClaw for the server to load.
+
+#### Other MCP Clients
+
+Use the same JSON config in your client's MCP server configuration — `m365-mcp` is a standard stdio MCP server with no client-specific requirements.
 
 ## Multi-Account
 
