@@ -14,7 +14,7 @@ const MAX_RETRIES = 4;
 const RETRY_BACKOFF_MS = 1000;
 
 export class GraphClient {
-  private timezone: string;
+  timezone: string;
 
   constructor(timezone = "UTC", private accountName?: string) {
     this.timezone = timezone;
@@ -153,19 +153,42 @@ export class GraphClient {
     await this.request(path, "DELETE");
   }
 
-  /** Download raw file content */
+  /** Download raw file content with retry on transient failures */
   async download(url: string, maxBytes = 50_000): Promise<string> {
     const token = await getAccessToken(this.accountName);
-    const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!resp.ok) {
-      throw new Error(`Download failed: ${resp.status} ${resp.statusText}`);
+
+    let attempt = 0;
+    let delay = RETRY_BACKOFF_MS;
+
+    while (true) {
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (resp.status === 429 && attempt < MAX_RETRIES) {
+        const retryAfter = resp.headers.get("Retry-After");
+        await new Promise((r) => setTimeout(r, retryAfter ? parseInt(retryAfter, 10) * 1000 : delay));
+        attempt++;
+        delay *= 2;
+        continue;
+      }
+
+      if (resp.status >= 500 && resp.status < 600 && attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, delay));
+        attempt++;
+        delay *= 2;
+        continue;
+      }
+
+      if (!resp.ok) {
+        throw new Error(`Download failed: ${resp.status} ${resp.statusText}`);
+      }
+
+      const buf = await resp.arrayBuffer();
+      // Truncate to text-safe size
+      const slice = buf.byteLength > maxBytes ? buf.slice(0, maxBytes) : buf;
+      return new TextDecoder().decode(slice);
     }
-    const buf = await resp.arrayBuffer();
-    // Truncate to text-safe size
-    const slice = buf.byteLength > maxBytes ? buf.slice(0, maxBytes) : buf;
-    return new TextDecoder().decode(slice);
   }
 
   /** Format a dateTimeTimeZone object for Graph API */

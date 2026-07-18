@@ -107,6 +107,7 @@ export interface DriveItem {
   folder?: { childCount: number };
   file?: { mimeType: string };
   webUrl: string;
+  createdDateTime?: string;
   lastModifiedDateTime: string;
   parentReference?: { path: string };
   "@microsoft.graph.downloadUrl"?: string;

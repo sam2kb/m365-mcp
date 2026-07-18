@@ -5,6 +5,34 @@
 import type { CalendarEvent } from "../types.js";
 import type { GraphClient } from "../graph.js";
 
+/** Build ISO 8601 start/end strings for a day in the given timezone. */
+function tzDayBounds(timezone: string, offsetDays = 0): { startDateTime: string; endDateTime: string } {
+  const d = new Date(Date.now() + offsetDays * 86400000);
+  const dateStr = d.toLocaleDateString("en-CA", { timeZone: timezone }); // "2026-07-18"
+
+  // Determine the UTC offset at noon (DST-safe) via formatToParts
+  const parts = Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "longOffset",
+  }).formatToParts(d);
+
+  let offset = "+00:00";
+  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+  const m = tzPart.match(/GMT([+-]\d{1,2}):?(\d{2})?/);
+  if (m) offset = `${m[1]}:${m[2] || "00"}`;
+
+  return {
+    startDateTime: `${dateStr}T00:00:00${offset}`,
+    endDateTime: `${dateStr}T23:59:59${offset}`,
+  };
+}
+
 export function registerCalendarTools(client: GraphClient) {
   const user = "/me";
 
@@ -46,15 +74,14 @@ export function registerCalendarTools(client: GraphClient) {
 
     // ── today ────────────────────────────────────────────────────
     async calendar_today(): Promise<string> {
-      const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      const bounds = tzDayBounds(client.timezone);
 
-      const path = `${user}/calendarView?startDateTime=${encodeURIComponent(start.toISOString())}&endDateTime=${encodeURIComponent(end.toISOString())}&$top=50&$orderby=start/dateTime`;
+      const path = `${user}/calendarView?startDateTime=${encodeURIComponent(bounds.startDateTime)}&endDateTime=${encodeURIComponent(bounds.endDateTime)}&$top=50&$orderby=start/dateTime`;
       const events = await client.getAll<CalendarEvent>(path);
 
       if (events.length === 0) return "No events today.";
 
+      const now = new Date();
       const lines = events.map((e) => {
         const startTime = new Date(e.start.dateTime + (e.start.dateTime.endsWith("Z") ? "" : "Z"));
         const endTime = new Date(e.end.dateTime + (e.end.dateTime.endsWith("Z") ? "" : "Z"));
@@ -72,13 +99,10 @@ export function registerCalendarTools(client: GraphClient) {
 
     // ── week ─────────────────────────────────────────────────────
     async calendar_week(): Promise<string> {
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(endOfWeek.getDate() + 7);
+      const startBounds = tzDayBounds(client.timezone, 0);
+      const endBounds = tzDayBounds(client.timezone, 7);
 
-      const path = `${user}/calendarView?startDateTime=${encodeURIComponent(startOfWeek.toISOString())}&endDateTime=${encodeURIComponent(endOfWeek.toISOString())}&$top=100&$orderby=start/dateTime`;
+      const path = `${user}/calendarView?startDateTime=${encodeURIComponent(startBounds.startDateTime)}&endDateTime=${encodeURIComponent(endBounds.endDateTime)}&$top=100&$orderby=start/dateTime`;
       const events = await client.getAll<CalendarEvent>(path);
 
       if (events.length === 0) return "No events this week.";

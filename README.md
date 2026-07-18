@@ -47,6 +47,8 @@ No tenant-wide `Mail.Read.All` or `Files.Read.All` needed.
    - Supported account types: **Single tenant** (or multi-tenant if you manage your own tenant)
    - Redirect URI: `http://localhost` (not used for device code, but required)
 3. Click **Register**
+4. Go to **Authentication** → **Advanced settings** → set **"Allow public client flows"** to **Yes** → **Save**
+   > This is required for device-code OAuth to work without a client secret.
 
 ### 2. Add API Permissions
 

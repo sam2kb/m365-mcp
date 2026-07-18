@@ -222,9 +222,12 @@ async function refreshAccessToken(config: AccountConfig, refreshToken: string): 
 
 // ─── public API ─────────────────────────────────────────────────────
 
+/** Serialises concurrent refresh attempts so only one runs at a time. */
+let refreshLock: Promise<string> | null = null;
+
 /**
  * Get a valid access token (auto-refresh if expired or within 5 min of expiry).
- * Uses exponential backoff on refresh failures.
+ * Uses a mutex to avoid concurrent refresh races.
  */
 export async function getAccessToken(accountName?: string): Promise<string> {
   const config = resolveAccount(accountName);
@@ -240,14 +243,29 @@ export async function getAccessToken(accountName?: string): Promise<string> {
     return tokens.access_token;
   }
 
-  // Refresh with exponential backoff (max 3 attempts)
+  // Serialise refresh — if another caller is already refreshing, wait for it
+  if (!refreshLock) {
+    refreshLock = doRefresh(config, tokens.refresh_token).finally(() => {
+      refreshLock = null;
+    });
+  }
+  return refreshLock;
+}
+
+async function doRefresh(config: AccountConfig, refreshToken: string): Promise<string> {
+  // Double-check tokens haven't been refreshed by a concurrent caller
+  const current = loadTokens(config);
+  if (current && current.expires_at > Date.now() + 5 * 60 * 1000) {
+    return current.access_token;
+  }
+
   let attempt = 0;
   let delay = 1000;
   while (attempt < 3) {
     try {
-      const fresh = await refreshAccessToken(config, tokens.refresh_token);
-      tokens = saveTokens(config, fresh);
-      return tokens.access_token;
+      const fresh = await refreshAccessToken(config, current?.refresh_token ?? refreshToken);
+      saveTokens(config, fresh);
+      return fresh.access_token;
     } catch (err: any) {
       attempt++;
       if (err.message.includes("expired") || err.message.includes("invalid_grant")) {
