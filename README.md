@@ -21,7 +21,7 @@ Built from the best of both `office365-connector` (delegated OAuth, multi-accoun
 | Tasks | ✅ | ❌ | ✅ |
 | Users | ✅ | ❌ | ✅ |
 | TypeScript | ✅ | ❌ (JS) | ✅ |
-| **Total tools** | 19 | ~12 (CLI) | **35** |
+| **Total tools** | 19 | ~12 (CLI) | **38** |
 
 ## Scope
 
@@ -72,16 +72,9 @@ Chat.ReadWrite
 
 Click **Grant admin consent** (or each user will consent individually during login).
 
-### 3. Create Client Secret
+> Organization-wide user listing and lookup additionally requires delegated `User.Read.All` with admin consent. This broader scope is not requested by default.
 
-**Certificates & secrets** → **New client secret** → copy the **Value** (not the Secret ID).
-
-You now have three values:
-- **Tenant ID** — from Overview (Directory ID)
-- **Client ID** — from Overview (Application ID)
-- **Client Secret** — the value you just copied
-
-### 4. Install
+### 3. Install
 
 ```bash
 # Clone
@@ -95,7 +88,7 @@ npm install
 npm run build
 ```
 
-### 5. Add Your Account & Authenticate
+### 4. Add Your Account & Authenticate
 
 ```bash
 # Add account
@@ -154,7 +147,7 @@ node dist/auth-cli.js list
 
 Each account needs its own App Registration in its respective tenant. Tokens are isolated per account.
 
-## Available Tools (35)
+## Available Tools (38)
 
 ### 📧 Mail (9 tools)
 | Tool | Description |
