@@ -76,6 +76,14 @@ Click **Grant admin consent** (or each user will consent individually during log
 
 ### 3. Install
 
+Install the published command-line tools:
+
+```bash
+npm install --global @sam2kb/m365-mcp
+```
+
+Or build from source:
+
 ```bash
 # Clone
 git clone https://github.com/sam2kb/m365-mcp.git
@@ -91,12 +99,12 @@ npm run build
 ### 4. Add Your Account & Authenticate
 
 ```bash
-# Add account
-node dist/auth-cli.js add work <tenant-id> <client-id> you@company.com "Work account"
-
-# Authenticate (device code flow)
-node dist/auth-cli.js login --account=work
+m365-mcp-auth add work <tenant-id> <client-id> you@company.com "Work account"
+m365-mcp-auth login --account=work
 ```
+
+When running from a source checkout, use `node dist/auth-cli.js` instead of
+`m365-mcp-auth`.
 
 Follow the on-screen URL + code to sign in. Tokens are stored securely in `~/.m365-mcp/auth/` by default. Set `M365_MCP_AUTH_DIR` to use another location.
 
@@ -106,14 +114,14 @@ The server uses standard MCP over stdio and works with any MCP client (Claude De
 
 #### OpenClaw
 
-Add to your mcporter config at `~/.openclaw/mcporter.json`:
+For the global npm installation, add this to your mcporter config at `~/.openclaw/mcporter.json`:
 
 ```json
 {
   "mcpServers": {
     "m365": {
-      "command": "node",
-      "args": ["/path/to/m365-mcp/dist/index.js"],
+      "command": "m365-mcp",
+      "args": [],
       "env": {
         "M365_ACCOUNT": "work",
         "M365_TIMEZONE": "America/Chicago"
@@ -126,10 +134,13 @@ Add to your mcporter config at `~/.openclaw/mcporter.json`:
 Or via mcporter CLI:
 
 ```bash
-mcporter config add m365 --stdio "node /absolute/path/to/m365-mcp/dist/index.js" \
+mcporter config add m365 --stdio "m365-mcp" \
   --env M365_ACCOUNT=work \
   --env M365_TIMEZONE=America/Chicago
 ```
+
+For a source checkout, use `"command": "node"` with
+`"args": ["/absolute/path/to/m365-mcp/dist/index.js"]`.
 
 Then restart OpenClaw for the server to load.
 

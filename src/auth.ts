@@ -110,7 +110,7 @@ export function resolveAccount(accountName?: string): AccountConfig {
   const store = loadAccounts();
   const name = accountName ?? store.default;
   if (!name) throw new Error(
-    "No account configured. Run: m365-mcp auth add <name> <tenantId> <clientId>"
+    "No account configured. Run: m365-mcp-auth add <name> <tenantId> <clientId>"
   );
   const acc = store.accounts[name];
   if (!acc) throw new Error(`Account "${name}" not found`);
@@ -243,7 +243,7 @@ export async function getAccessToken(accountName?: string): Promise<string> {
   let tokens = loadTokens(config);
   if (!tokens) {
     throw new Error(
-      `Not authenticated for account "${config.name}". Run: m365-mcp auth login [--account=${config.name}]`
+      `Not authenticated for account "${config.name}". Run: m365-mcp-auth login [--account=${config.name}]`
     );
   }
 
@@ -281,7 +281,7 @@ async function doRefresh(config: AccountConfig, refreshToken: string): Promise<s
       attempt++;
       if (err.message.includes("expired") || err.message.includes("invalid_grant")) {
         throw new Error(
-          `Refresh token expired for "${config.name}". Re-authenticate: m365-mcp auth login`
+          `Refresh token expired for "${config.name}". Re-authenticate: m365-mcp-auth login`
         );
       }
       if (attempt >= 3) throw err;

@@ -1,11 +1,12 @@
 {
-  "name": "m365-mcp",
+  "name": "@sam2kb/m365-mcp",
   "version": "1.0.0",
   "description": "Production-grade Microsoft 365 MCP server — email, calendar, contacts, OneDrive, Teams, tasks, and users via delegated OAuth",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "m365-mcp": "dist/index.js"
+    "m365-mcp": "dist/index.js",
+    "m365-mcp-auth": "dist/auth-cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -28,6 +29,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/sam2kb/m365-mcp"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"

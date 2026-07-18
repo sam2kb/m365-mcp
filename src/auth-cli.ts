@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * m365-mcp auth CLI — manage accounts and authenticate outside the MCP server
+ * m365-mcp-auth CLI — manage accounts and authenticate outside the MCP server
  *
  * Usage:
  *   npx tsx src/auth-cli.ts add     <name> <tenantId> <clientId> [email] [desc]
@@ -32,7 +32,7 @@ async function main() {
     switch (cmd) {
       case "add": {
         if (positional.length < 3) {
-          console.log("Usage: m365-mcp auth add <name> <tenantId> <clientId> [email] [description]");
+          console.log("Usage: m365-mcp-auth add <name> <tenantId> <clientId> [email] [description]");
           process.exit(1);
         }
         const [name, tenantId, clientId, email, desc] = positional;
@@ -43,7 +43,7 @@ async function main() {
 
       case "remove": {
         if (positional.length < 1) {
-          console.log("Usage: m365-mcp auth remove <name>");
+          console.log("Usage: m365-mcp-auth remove <name>");
           process.exit(1);
         }
         removeAccount(positional[0]);
@@ -53,7 +53,7 @@ async function main() {
 
       case "default": {
         if (positional.length < 1) {
-          console.log("Usage: m365-mcp auth default <name>");
+          console.log("Usage: m365-mcp-auth default <name>");
           process.exit(1);
         }
         setDefaultAccount(positional[0]);
@@ -65,7 +65,7 @@ async function main() {
         const { default: def, accounts } = listAccounts();
         if (accounts.length === 0) {
           console.log("No accounts configured.\n");
-          console.log("Add one: m365-mcp auth add <name> <tenantId> <clientId>");
+          console.log("Add one: m365-mcp-auth add <name> <tenantId> <clientId>");
           break;
         }
         console.log("📧 M365 Accounts:\n");
@@ -114,12 +114,12 @@ async function main() {
         const acc = accounts.find((a) => a.isDefault) || accounts[0];
         console.log(`M365_ACCOUNT=${acc.name}`);
         console.log(`# M365_TIMEZONE=UTC  (optional, default: UTC)`);
-        console.log(`# Run 'm365-mcp auth login --account=${acc.name}' to authenticate`);
+        console.log(`# Run 'm365-mcp-auth login --account=${acc.name}' to authenticate`);
         break;
       }
 
       default:
-        console.log("m365-mcp auth — Account Management CLI\n");
+        console.log("m365-mcp-auth — Account Management CLI\n");
         console.log("Commands:");
         console.log("  add     <name> <tenantId> <clientId> [email] [desc]");
         console.log("  remove  <name>");
