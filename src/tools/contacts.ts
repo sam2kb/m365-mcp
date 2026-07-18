@@ -12,10 +12,10 @@ export function registerContactsTools(client: GraphClient) {
     async contacts_list(args: { top?: number; folderId?: string }): Promise<string> {
       const top = args.top || 50;
       const folderPath = args.folderId
-        ? `/contactFolders/${args.folderId}`
+        ? `/contactFolders/${encodeURIComponent(args.folderId)}`
         : "";
       const path = `${user}${folderPath}/contacts?$top=${top}&$orderby=displayName`;
-      const contacts = await client.getAll<Contact>(path);
+      const contacts = await client.getAll<Contact>(path, 10, top);
       return JSON.stringify(
         contacts.map((c) => ({
           id: c.id,
@@ -32,8 +32,9 @@ export function registerContactsTools(client: GraphClient) {
     },
 
     async contacts_search(args: { query: string; top?: number }): Promise<string> {
-      const path = `${user}/contacts?$search="${encodeURIComponent(args.query)}"&$top=${args.top || 20}`;
-      const contacts = await client.getAll<Contact>(path);
+      const top = args.top || 20;
+      const path = `${user}/contacts?$search="${encodeURIComponent(args.query)}"&$top=${top}`;
+      const contacts = await client.getAll<Contact>(path, 10, top);
       return JSON.stringify(
         contacts.map((c) => ({
           id: c.id,
@@ -48,7 +49,8 @@ export function registerContactsTools(client: GraphClient) {
     },
 
     async contacts_read(args: { contactId: string }): Promise<string> {
-      const c = await client.get<Contact>(`${user}/contacts/${args.contactId}`);
+      const contactId = encodeURIComponent(args.contactId);
+      const c = await client.get<Contact>(`${user}/contacts/${contactId}`);
       return JSON.stringify(c, null, 2);
     },
 
@@ -95,12 +97,14 @@ export function registerContactsTools(client: GraphClient) {
       if (args.jobTitle) patch.jobTitle = args.jobTitle;
       if (args.mobilePhone) patch.mobilePhone = args.mobilePhone;
 
-      await client.patch(`${user}/contacts/${args.contactId}`, patch);
+      const contactId = encodeURIComponent(args.contactId);
+      await client.patch(`${user}/contacts/${contactId}`, patch);
       return JSON.stringify({ success: true, contactId: args.contactId });
     },
 
     async contacts_delete(args: { contactId: string }): Promise<string> {
-      await client.delete(`${user}/contacts/${args.contactId}`);
+      const contactId = encodeURIComponent(args.contactId);
+      await client.delete(`${user}/contacts/${contactId}`);
       return JSON.stringify({ success: true });
     },
   };

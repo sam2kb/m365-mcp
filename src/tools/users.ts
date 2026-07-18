@@ -8,29 +8,28 @@ import type { GraphClient } from "../graph.js";
 export function registerUsersTools(client: GraphClient) {
   return {
     async users_list(args: { top?: number; filter?: string; search?: string }): Promise<string> {
-      let path = `/users?$top=${args.top || 50}&$select=id,displayName,mail,userPrincipalName,jobTitle,department,officeLocation`;
+      const top = args.top || 50;
+      let path = `/users?$top=${top}&$select=id,displayName,mail,userPrincipalName,jobTitle,department,officeLocation`;
       if (args.filter) path += `&$filter=${encodeURIComponent(args.filter)}`;
       if (args.search) path += `&$search="${encodeURIComponent(args.search)}"`;
-      const users = await client.getAll<OrgUser>(path);
+      const users = await client.getAll<OrgUser>(path, 10, top);
       return JSON.stringify(users, null, 2);
     },
 
     async users_profile(args: { user?: string }): Promise<string> {
       const userId = args.user || "me";
+      const userPath = userId === "me" ? "/me" : `/users/${encodeURIComponent(userId)}`;
       const data = await client.get<OrgUser>(
-        `${
-          userId === "me" ? "/me" : `/users/${userId}`
-        }?$select=id,displayName,mail,userPrincipalName,jobTitle,department,officeLocation,mobilePhone,businessPhones`
+        `${userPath}?$select=id,displayName,mail,userPrincipalName,jobTitle,department,officeLocation,mobilePhone,businessPhones`
       );
       return JSON.stringify(data, null, 2);
     },
 
     async users_manager(args: { user?: string }): Promise<string> {
       const userId = args.user || "me";
+      const userPath = userId === "me" ? "/me" : `/users/${encodeURIComponent(userId)}`;
       const data = await client.get<any>(
-        `${
-          userId === "me" ? "/me" : `/users/${userId}`
-        }/manager?$select=id,displayName,mail,userPrincipalName,jobTitle`
+        `${userPath}/manager?$select=id,displayName,mail,userPrincipalName,jobTitle`
       );
       return JSON.stringify(data, null, 2);
     },

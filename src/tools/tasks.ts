@@ -26,9 +26,10 @@ export function registerTasksTools(client: GraphClient) {
     },
 
     async tasks_list(args: { listId: string; top?: number; filter?: string }): Promise<string> {
-      let path = `${user}/todo/lists/${encodeURIComponent(args.listId)}/tasks?$top=${args.top || 50}&$orderby=createdDateTime desc`;
+      const top = args.top || 50;
+      let path = `${user}/todo/lists/${encodeURIComponent(args.listId)}/tasks?$top=${top}&$orderby=createdDateTime desc`;
       if (args.filter) path += `&$filter=${encodeURIComponent(args.filter)}`;
-      const tasks = await client.getAll<TodoTask>(path);
+      const tasks = await client.getAll<TodoTask>(path, 10, top);
       return JSON.stringify(
         tasks.map((t) => ({
           id: t.id,
@@ -84,16 +85,18 @@ export function registerTasksTools(client: GraphClient) {
       if (args.importance) patch.importance = args.importance;
       if (args.due) patch.dueDateTime = { dateTime: args.due, timeZone: "UTC" };
 
+      const taskId = encodeURIComponent(args.taskId);
       await client.patch(
-        `${user}/todo/lists/${encodeURIComponent(args.listId)}/tasks/${args.taskId}`,
+        `${user}/todo/lists/${encodeURIComponent(args.listId)}/tasks/${taskId}`,
         patch
       );
       return JSON.stringify({ success: true, taskId: args.taskId });
     },
 
     async tasks_delete(args: { listId: string; taskId: string }): Promise<string> {
+      const taskId = encodeURIComponent(args.taskId);
       await client.delete(
-        `${user}/todo/lists/${encodeURIComponent(args.listId)}/tasks/${args.taskId}`
+        `${user}/todo/lists/${encodeURIComponent(args.listId)}/tasks/${taskId}`
       );
       return JSON.stringify({ success: true });
     },

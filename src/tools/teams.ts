@@ -10,8 +10,9 @@ export function registerTeamsTools(client: GraphClient) {
 
   return {
     async teams_chats(args: { top?: number }): Promise<string> {
-      const path = `${user}/chats?$top=${args.top || 20}&$expand=members&$orderby=lastUpdatedDateTime desc`;
-      const chats = await client.getAll<TeamsChat>(path);
+      const top = args.top || 20;
+      const path = `${user}/chats?$top=${top}&$expand=members&$orderby=lastUpdatedDateTime desc`;
+      const chats = await client.getAll<TeamsChat>(path, 10, top);
       return JSON.stringify(
         chats.map((c) => ({
           id: c.id,
@@ -26,8 +27,10 @@ export function registerTeamsTools(client: GraphClient) {
     },
 
     async teams_messages(args: { chatId: string; top?: number }): Promise<string> {
-      const path = `${user}/chats/${args.chatId}/messages?$top=${args.top || 30}&$orderby=createdDateTime desc`;
-      const msgs = await client.getAll<TeamsMessage>(path);
+      const top = args.top || 30;
+      const chatId = encodeURIComponent(args.chatId);
+      const path = `${user}/chats/${chatId}/messages?$top=${top}&$orderby=createdDateTime desc`;
+      const msgs = await client.getAll<TeamsMessage>(path, 10, top);
       return JSON.stringify(
         msgs.map((m) => ({
           id: m.id,
@@ -42,8 +45,9 @@ export function registerTeamsTools(client: GraphClient) {
     },
 
     async teams_send(args: { chatId: string; message: string }): Promise<string> {
+      const chatId = encodeURIComponent(args.chatId);
       const data = await client.post<any>(
-        `${user}/chats/${args.chatId}/messages`,
+        `${user}/chats/${chatId}/messages`,
         { body: { contentType: "text", content: args.message } }
       );
       return JSON.stringify({ id: data.id, success: true }, null, 2);

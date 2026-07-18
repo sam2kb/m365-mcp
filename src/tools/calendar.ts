@@ -52,7 +52,7 @@ export function registerCalendarTools(client: GraphClient) {
         path = `${user}/events?$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,webLink`;
       }
 
-      const events = await client.getAll<CalendarEvent>(path);
+      const events = await client.getAll<CalendarEvent>(path, 10, top);
       return JSON.stringify(
         events.map((e) => ({
           id: e.id,
@@ -77,7 +77,7 @@ export function registerCalendarTools(client: GraphClient) {
       const bounds = tzDayBounds(client.timezone);
 
       const path = `${user}/calendarView?startDateTime=${encodeURIComponent(bounds.startDateTime)}&endDateTime=${encodeURIComponent(bounds.endDateTime)}&$top=50&$orderby=start/dateTime`;
-      const events = await client.getAll<CalendarEvent>(path);
+      const events = await client.getAll<CalendarEvent>(path, 10, 50);
 
       if (events.length === 0) return "No events today.";
 
@@ -100,10 +100,10 @@ export function registerCalendarTools(client: GraphClient) {
     // ── week ─────────────────────────────────────────────────────
     async calendar_week(): Promise<string> {
       const startBounds = tzDayBounds(client.timezone, 0);
-      const endBounds = tzDayBounds(client.timezone, 7);
+      const endBounds = tzDayBounds(client.timezone, 6);
 
       const path = `${user}/calendarView?startDateTime=${encodeURIComponent(startBounds.startDateTime)}&endDateTime=${encodeURIComponent(endBounds.endDateTime)}&$top=100&$orderby=start/dateTime`;
-      const events = await client.getAll<CalendarEvent>(path);
+      const events = await client.getAll<CalendarEvent>(path, 10, 100);
 
       if (events.length === 0) return "No events this week.";
 
@@ -180,7 +180,8 @@ export function registerCalendarTools(client: GraphClient) {
       if (args.body) patch.body = { contentType: "HTML", content: args.body };
       if (args.location) patch.location = { displayName: args.location };
 
-      await client.patch(`${user}/events/${args.eventId}`, patch);
+      const eventId = encodeURIComponent(args.eventId);
+      await client.patch(`${user}/events/${eventId}`, patch);
       return JSON.stringify({ success: true, eventId: args.eventId });
     },
 
@@ -189,7 +190,8 @@ export function registerCalendarTools(client: GraphClient) {
       eventId: string;
       comment?: string;
     }): Promise<string> {
-      await client.post(`${user}/events/${args.eventId}/cancel`, {
+      const eventId = encodeURIComponent(args.eventId);
+      await client.post(`${user}/events/${eventId}/cancel`, {
         comment: args.comment || "",
       });
       return JSON.stringify({ success: true, eventId: args.eventId });

@@ -5,14 +5,19 @@
 import type { DriveItem } from "../types.js";
 import type { GraphClient } from "../graph.js";
 
+function encodeDrivePath(value: string): string {
+  return value.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+}
+
 export function registerFilesTools(client: GraphClient) {
   const user = "/me";
 
   return {
     async files_list(args: { path?: string; top?: number }): Promise<string> {
-      const folderPath = args.path ? `:/${args.path}:` : "";
-      const path = `${user}/drive/root${folderPath}/children?$top=${args.top || 50}&$select=id,name,size,folder,file,webUrl,lastModifiedDateTime`;
-      const items = await client.getAll<DriveItem>(path);
+      const top = args.top || 50;
+      const folderPath = args.path ? `:/${encodeDrivePath(args.path)}:` : "";
+      const path = `${user}/drive/root${folderPath}/children?$top=${top}&$select=id,name,size,folder,file,webUrl,lastModifiedDateTime`;
+      const items = await client.getAll<DriveItem>(path, 10, top);
       return JSON.stringify(
         items.map((f) => ({
           id: f.id,
@@ -30,8 +35,10 @@ export function registerFilesTools(client: GraphClient) {
     },
 
     async files_search(args: { query: string; top?: number }): Promise<string> {
-      const path = `${user}/drive/root/search(q='${encodeURIComponent(args.query)}')?$top=${args.top || 20}&$select=id,name,size,file,webUrl,parentReference`;
-      const items = await client.getAll<DriveItem>(path);
+      const top = args.top || 20;
+      const query = encodeURIComponent(args.query.replace(/'/g, "''")).replace(/'/g, "%27");
+      const path = `${user}/drive/root/search(q='${query}')?$top=${top}&$select=id,name,size,file,webUrl,parentReference`;
+      const items = await client.getAll<DriveItem>(path, 10, top);
       return JSON.stringify(
         items.map((f) => ({
           id: f.id,
@@ -47,8 +54,9 @@ export function registerFilesTools(client: GraphClient) {
 
     async files_read(args: { itemId: string; maxBytes?: number }): Promise<string> {
       // Get item metadata first to find download URL
+      const itemId = encodeURIComponent(args.itemId);
       const meta = await client.get<any>(
-        `${user}/drive/items/${args.itemId}`
+        `${user}/drive/items/${itemId}`
       );
 
       const downloadUrl = meta["@microsoft.graph.downloadUrl"];
@@ -62,14 +70,15 @@ export function registerFilesTools(client: GraphClient) {
     },
 
     async files_info(args: { itemId: string }): Promise<string> {
+      const itemId = encodeURIComponent(args.itemId);
       const data = await client.get<DriveItem>(
-        `${user}/drive/items/${args.itemId}?$select=id,name,size,folder,file,webUrl,lastModifiedDateTime,createdDateTime,parentReference`
+        `${user}/drive/items/${itemId}?$select=id,name,size,folder,file,webUrl,lastModifiedDateTime,createdDateTime,parentReference`
       );
       return JSON.stringify(data, null, 2);
     },
 
     async files_create_folder(args: { name: string; parentPath?: string }): Promise<string> {
-      const parentPath = args.parentPath ? `:/${args.parentPath}:` : "";
+      const parentPath = args.parentPath ? `:/${encodeDrivePath(args.parentPath)}:` : "";
       const path = `${user}/drive/root${parentPath}/children`;
       const data = await client.post<any>(path, {
         name: args.name,

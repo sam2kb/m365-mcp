@@ -23,7 +23,7 @@ export function registerMailTools(client: GraphClient) {
       if (args.filter) path += `&$filter=${encodeURIComponent(args.filter)}`;
       if (args.search) path += `&$search="${encodeURIComponent(args.search)}"`;
 
-      const msgs = await client.getAll<EmailMessage>(path);
+      const msgs = await client.getAll<EmailMessage>(path, 10, top);
       return JSON.stringify(
         msgs.map((m) => ({
           id: m.id,
@@ -42,8 +42,9 @@ export function registerMailTools(client: GraphClient) {
 
     // ── read ─────────────────────────────────────────────────────
     async mail_read(args: { messageId: string }): Promise<string> {
+      const messageId = encodeURIComponent(args.messageId);
       const m = await client.get<EmailMessage>(
-        `${user}/messages/${args.messageId}`
+        `${user}/messages/${messageId}`
       );
       return JSON.stringify(
         {
@@ -104,10 +105,11 @@ export function registerMailTools(client: GraphClient) {
       body: string;
       replyAll?: boolean;
     }): Promise<string> {
+      const messageId = encodeURIComponent(args.messageId);
       await client.post(
         args.replyAll
-          ? `${user}/messages/${args.messageId}/replyAll`
-          : `${user}/messages/${args.messageId}/reply`,
+          ? `${user}/messages/${messageId}/replyAll`
+          : `${user}/messages/${messageId}/reply`,
         { comment: args.body }
       );
       return JSON.stringify({ success: true });
@@ -115,8 +117,9 @@ export function registerMailTools(client: GraphClient) {
 
     // ── search ───────────────────────────────────────────────────
     async mail_search(args: { query: string; top?: number }): Promise<string> {
-      const path = `${user}/messages?$search="${encodeURIComponent(args.query)}"&$top=${args.top || 20}&$orderby=receivedDateTime desc`;
-      const msgs = await client.getAll<EmailMessage>(path);
+      const top = args.top || 20;
+      const path = `${user}/messages?$search="${encodeURIComponent(args.query)}"&$top=${top}&$orderby=receivedDateTime desc`;
+      const msgs = await client.getAll<EmailMessage>(path, 10, top);
       return JSON.stringify(
         msgs.map((m) => ({
           id: m.id,
@@ -132,8 +135,9 @@ export function registerMailTools(client: GraphClient) {
 
     // ── move ─────────────────────────────────────────────────────
     async mail_move(args: { messageId: string; folderId: string }): Promise<string> {
+      const messageId = encodeURIComponent(args.messageId);
       await client.post(
-        `${user}/messages/${args.messageId}/move`,
+        `${user}/messages/${messageId}/move`,
         { destinationId: args.folderId }
       );
       return JSON.stringify({ success: true });
@@ -141,13 +145,15 @@ export function registerMailTools(client: GraphClient) {
 
     // ── delete ───────────────────────────────────────────────────
     async mail_delete(args: { messageId: string }): Promise<string> {
-      await client.delete(`${user}/messages/${args.messageId}`);
+      const messageId = encodeURIComponent(args.messageId);
+      await client.delete(`${user}/messages/${messageId}`);
       return JSON.stringify({ success: true });
     },
 
     // ── mark read / unread ───────────────────────────────────────
     async mail_mark_read(args: { messageId: string; isRead: boolean }): Promise<string> {
-      await client.patch(`${user}/messages/${args.messageId}`, {
+      const messageId = encodeURIComponent(args.messageId);
+      await client.patch(`${user}/messages/${messageId}`, {
         isRead: args.isRead,
       });
       return JSON.stringify({ success: true, isRead: args.isRead });
