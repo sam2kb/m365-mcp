@@ -9,22 +9,36 @@ Built from the best of both `office365-connector` (delegated OAuth, multi-accoun
 
 ## Why this exists
 
-| Feature | mcp-microsoft365 | office365-connector | **m365-mcp** |
+This comparison reflects the code shipped in
+[`mcp-microsoft365` v1.0.0](https://clawhub.ai/makhatib/skills/mcp-microsoft365)
+and
+[`office365-connector` v2.0.0](https://clawhub.ai/tirandagan/skills/office365-connector)
+as reviewed on July 18, 2026.
+
+| Feature | `mcp-microsoft365` | `office365-connector` | **`m365-mcp`** |
 |---|---|---|---|
-| Auth model | Client credentials (tenant-wide) | Delegated (device code) | **Delegated (device code)** ✅ |
+| Auth flow | Client credentials (app-only) | Device code + client secret | **Public-client device code** |
+| Access model | Application permissions (tenant-wide) | Delegated (signed-in user) | **Delegated (signed-in user)** |
+| Client secret | Required | Required and stored locally | **None** ✅ |
 | MCP server | ✅ | ❌ (CLI scripts) | ✅ |
 | Multi-account | ❌ | ✅ | ✅ |
 | Pagination | ❌ | ❌ | ✅ |
-| Rate limit handling | ❌ | Partial | ✅ |
+| Graph 429 retries | ❌ | ❌ (not implemented in shipped code) | ✅ |
+| Read-only mode | ❌ | ❌ | ✅ |
 | Email | ✅ | ✅ | ✅ |
 | Calendar | ✅ | ✅ | ✅ |
-| Contacts | ❌ | ✅ | ✅ |
+| Contacts | ❌ | ❌ (documented, not shipped) | ✅ |
 | OneDrive | ✅ | ❌ | ✅ |
 | Teams | ✅ | ❌ | ✅ |
 | Tasks | ✅ | ❌ | ✅ |
 | Users | ✅ | ❌ | ✅ |
-| TypeScript | ✅ | ❌ (JS) | ✅ |
-| **Total tools** | 19 | ~12 (CLI) | **38** |
+| Implementation | TypeScript | JavaScript CLI | TypeScript |
+| Interface coverage | 19 MCP tools | CLI scripts | **38 MCP tools** |
+
+`m365-mcp` does not store a client secret or password. Tenant and client IDs are
+non-secret identifiers; sensitive OAuth access and refresh tokens are stored
+locally as permission-restricted plaintext files. See [Security](#security) for
+the storage and revocation details.
 
 ## Scope
 
