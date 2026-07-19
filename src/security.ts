@@ -27,6 +27,7 @@ const READ_ONLY_TOOLS = new Set([
   "m365_contacts_list",
   "m365_contacts_search",
   "m365_contacts_read",
+  "m365_contacts_categories_list",
   "m365_contacts_folders_list",
   "m365_files_list",
   "m365_files_search",

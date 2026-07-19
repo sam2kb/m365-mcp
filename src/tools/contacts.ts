@@ -169,19 +169,54 @@ function summarizeContact(contact: Contact) {
   };
 }
 
+type CategoryMatch = "any" | "all";
+
+interface CategoryFilter {
+  category?: string;
+  categories?: string[];
+  categoryMatch?: CategoryMatch;
+}
+
+function normalizeCategoryFilter(filter: CategoryFilter): {
+  categories: string[];
+  match: CategoryMatch;
+} {
+  if (filter.category !== undefined && filter.categories !== undefined) {
+    throw new Error("Use category or categories, not both");
+  }
+  const categories = filter.categories ?? (filter.category !== undefined ? [filter.category] : []);
+  if (categories.some((category) => category.length === 0)) {
+    throw new Error("Category names cannot be empty");
+  }
+  const match = filter.categoryMatch ?? "any";
+  if (match !== "any" && match !== "all") {
+    throw new Error('categoryMatch must be "any" or "all"');
+  }
+  return {
+    categories: [...new Set(categories.map((category) => category.toLocaleLowerCase()))],
+    match,
+  };
+}
+
 async function getContacts(
   client: GraphClient,
   path: string,
   top: number,
-  category?: string
+  filter: CategoryFilter
 ): Promise<Contact[]> {
-  if (!category) return client.getAll<Contact>(path, 10, top);
+  const { categories, match } = normalizeCategoryFilter(filter);
+  if (categories.length === 0) return client.getAll<Contact>(path, 10, top);
 
   const matches: Contact[] = [];
-  const wanted = category.toLocaleLowerCase();
   for await (const page of client.paginate<Contact>(path, 10)) {
     for (const contact of page) {
-      if (contact.categories?.some((item) => item.toLocaleLowerCase() === wanted)) {
+      const assigned = new Set(
+        (contact.categories ?? []).map((category) => category.toLocaleLowerCase())
+      );
+      const matched = match === "all"
+        ? categories.every((category) => assigned.has(category))
+        : categories.some((category) => assigned.has(category));
+      if (matched) {
         matches.push(contact);
         if (matches.length === top) return matches;
       }
@@ -192,17 +227,17 @@ async function getContacts(
 
 export function registerContactsTools(client: GraphClient) {
   return {
-    async contacts_list(args: ContactLocation & { top?: number; category?: string }): Promise<string> {
+    async contacts_list(args: ContactLocation & CategoryFilter & { top?: number }): Promise<string> {
       const top = normalizeTop(args.top, 50);
       const path = `${contactCollectionPath(args)}?$top=${Math.min(top, 100)}&$orderby=displayName`;
-      const contacts = await getContacts(client, path, top, args.category);
+      const contacts = await getContacts(client, path, top, args);
       return JSON.stringify(contacts.map(summarizeContact), null, 2);
     },
 
-    async contacts_search(args: ContactLocation & { query: string; top?: number; category?: string }): Promise<string> {
+    async contacts_search(args: ContactLocation & CategoryFilter & { query: string; top?: number }): Promise<string> {
       const top = normalizeTop(args.top, 20);
       const path = `${contactCollectionPath(args)}?$search=%22${encodeURIComponent(args.query)}%22&$top=${Math.min(top, 100)}`;
-      const contacts = await getContacts(client, path, top, args.category);
+      const contacts = await getContacts(client, path, top, args);
       return JSON.stringify(contacts.map(summarizeContact), null, 2);
     },
 
@@ -228,6 +263,28 @@ export function registerContactsTools(client: GraphClient) {
     async contacts_delete(args: ContactLocation & { contactId: string }): Promise<string> {
       await client.delete(contactResourcePath(args, args.contactId));
       return JSON.stringify({ success: true, contactId: args.contactId });
+    },
+
+    async contacts_categories_list(args: ContactLocation = {}): Promise<string> {
+      const path = `${contactCollectionPath(args)}?$top=100&$select=id,categories`;
+      const contacts = await client.getAll<Contact>(path, 100, 10_000);
+      const categories = new Map<string, { name: string; count: number }>();
+      for (const contact of contacts) {
+        const seen = new Set<string>();
+        for (const name of contact.categories ?? []) {
+          const key = name.toLocaleLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const existing = categories.get(key);
+          if (existing) existing.count++;
+          else categories.set(key, { name, count: 1 });
+        }
+      }
+      return JSON.stringify(
+        [...categories.values()].sort((a, b) => a.name.localeCompare(b.name)),
+        null,
+        2
+      );
     },
 
     async contacts_folders_list(args: { parentFolderId?: string; top?: number } = {}): Promise<string> {
@@ -264,6 +321,23 @@ export function registerContactsTools(client: GraphClient) {
 const locationProperties = {
   folderId: { type: "string", description: "Optional contact folder ID; omit for the default Contacts folder" },
   parentFolderId: { type: "string", description: "Parent folder ID when folderId identifies a direct child folder" },
+};
+
+const categoryFilterProperties = {
+  category: { type: "string", minLength: 1, description: "One exact category name (case-insensitive)" },
+  categories: {
+    type: "array",
+    minItems: 1,
+    uniqueItems: true,
+    description: "Exact category names (case-insensitive); use categoryMatch for any/all behavior",
+    items: { type: "string", minLength: 1 },
+  },
+  categoryMatch: {
+    type: "string",
+    enum: ["any", "all"],
+    default: "any",
+    description: "Match any supplied category or require all supplied categories",
+  },
 };
 
 const addressSchema = {
@@ -307,13 +381,13 @@ const contactFieldProperties = {
 export const contactsToolSchemas = [
   {
     name: "m365_contacts_list",
-    description: "List contacts, optionally within a folder and filtered by exact category name",
-    inputSchema: { type: "object", properties: { top: { type: "number", minimum: 1, maximum: 500, default: 50 }, category: { type: "string", description: "Exact category name, case-insensitive" }, ...locationProperties } },
+    description: "List contacts, optionally within a folder and filtered by one or more exact category names",
+    inputSchema: { type: "object", properties: { top: { type: "number", minimum: 1, maximum: 500, default: 50 }, ...categoryFilterProperties, ...locationProperties } },
   },
   {
     name: "m365_contacts_search",
-    description: "Search contacts by name, email, or company, optionally within a folder or category",
-    inputSchema: { type: "object", properties: { query: { type: "string" }, top: { type: "number", minimum: 1, maximum: 500, default: 20 }, category: { type: "string", description: "Exact category name, case-insensitive" }, ...locationProperties }, required: ["query"] },
+    description: "Search contacts by name, email, or company, optionally within a folder and filtered by exact categories",
+    inputSchema: { type: "object", properties: { query: { type: "string" }, top: { type: "number", minimum: 1, maximum: 500, default: 20 }, ...categoryFilterProperties, ...locationProperties }, required: ["query"] },
   },
   {
     name: "m365_contacts_read", description: "Read a contact's full details",
@@ -332,6 +406,11 @@ export const contactsToolSchemas = [
   {
     name: "m365_contacts_delete", description: "Move a contact to Deleted Items",
     inputSchema: { type: "object", properties: { contactId: { type: "string" }, ...locationProperties }, required: ["contactId"] },
+  },
+  {
+    name: "m365_contacts_categories_list",
+    description: "List unique category names assigned to contacts in the default or selected folder, with usage counts",
+    inputSchema: { type: "object", properties: { ...locationProperties } },
   },
   {
     name: "m365_contacts_folders_list", description: "List top-level contact folders or the direct children of one folder",

@@ -65,6 +65,36 @@ describe("contacts tools", () => {
     expect(client.getAll).not.toHaveBeenCalled();
   });
 
+  it("supports exact multi-category any and all matching", async () => {
+    const page = [
+      { id: "c1", categories: ["Customers"] },
+      { id: "c2", categories: ["Customers", "VIP"] },
+      { id: "c3", categories: ["VIP"] },
+    ];
+    async function* pages() { yield page; }
+
+    (client.paginate as any).mockReturnValueOnce(pages());
+    const any = JSON.parse(await tools.contacts_list({
+      categories: ["customers", "vip"],
+      categoryMatch: "any",
+    }));
+    expect(any.map((contact: any) => contact.id)).toEqual(["c1", "c2", "c3"]);
+
+    (client.paginate as any).mockReturnValueOnce(pages());
+    const all = JSON.parse(await tools.contacts_list({
+      categories: ["customers", "vip"],
+      categoryMatch: "all",
+    }));
+    expect(all.map((contact: any) => contact.id)).toEqual(["c2"]);
+  });
+
+  it("rejects ambiguous single and multi-category filters", async () => {
+    await expect(tools.contacts_list({
+      category: "Customers",
+      categories: ["VIP"],
+    })).rejects.toThrow("category or categories");
+  });
+
   it("searches inside a child folder", async () => {
     await tools.contacts_search({
       query: "Alice",
@@ -140,6 +170,25 @@ describe("contacts tools", () => {
     );
   });
 
+  it("lists unique categories with case-insensitive usage counts", async () => {
+    (client.getAll as any).mockResolvedValue([
+      { id: "c1", categories: ["VIP", "vip", "Customers"] },
+      { id: "c2", categories: ["customers", "Vendors"] },
+    ]);
+
+    const parsed = JSON.parse(await tools.contacts_categories_list({ folderId: "f1" }));
+    expect(client.getAll).toHaveBeenCalledWith(
+      "/me/contactFolders/f1/contacts?$top=100&$select=id,categories",
+      100,
+      10_000
+    );
+    expect(parsed).toEqual([
+      { name: "Customers", count: 2 },
+      { name: "Vendors", count: 1 },
+      { name: "VIP", count: 1 },
+    ]);
+  });
+
   it("lists, creates, updates, and deletes contact folders", async () => {
     (client.getAll as any).mockResolvedValue([{ id: "child", displayName: "Vendors" }]);
     await tools.contacts_folders_list({ parentFolderId: "parent" });
@@ -173,8 +222,8 @@ describe("contacts tools", () => {
     );
   });
 
-  it("exposes 10 contact tool schemas", () => {
-    expect(contactsToolSchemas).toHaveLength(10);
-    expect(new Set(contactsToolSchemas.map((schema) => schema.name)).size).toBe(10);
+  it("exposes 11 contact tool schemas", () => {
+    expect(contactsToolSchemas).toHaveLength(11);
+    expect(new Set(contactsToolSchemas.map((schema) => schema.name)).size).toBe(11);
   });
 });
