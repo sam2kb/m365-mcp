@@ -171,6 +171,16 @@ function saveTokens(config: AccountConfig, tokens: TokenData): TokenData {
 
 // ─── HTTPS helper ───────────────────────────────────────────────────
 
+class OAuthError extends Error {
+  constructor(
+    readonly code: string | undefined,
+    description: string
+  ) {
+    super(`Auth error${code ? ` [${code}]` : ""}: ${description}`);
+    this.name = "OAuthError";
+  }
+}
+
 async function httpsPost(url: string, body: URLSearchParams): Promise<any> {
   const resp = await fetch(url, {
     method: "POST",
@@ -179,8 +189,9 @@ async function httpsPost(url: string, body: URLSearchParams): Promise<any> {
   });
   const data = await resp.json();
   if (!resp.ok) {
-    throw new Error(
-      `Auth error [${data.error}]: ${data.error_description ?? resp.statusText}`
+    throw new OAuthError(
+      typeof data.error === "string" ? data.error : undefined,
+      data.error_description ?? resp.statusText
     );
   }
   return data;
@@ -333,20 +344,21 @@ export async function authenticate(
       const tokens = await pollForToken(dc.device_code, config);
       return saveTokens(config, tokens);
     } catch (err: any) {
+      const errorCode = err instanceof OAuthError ? err.code : undefined;
       if (
-        err.message.includes("authorization_pending") ||
+        errorCode === "authorization_pending" ||
         err.message.includes("AADSTS70016")
       ) {
         continue;
       }
       if (
-        err.message.includes("authorization_declined") ||
-        err.message.includes("access_denied")
+        errorCode === "authorization_declined" ||
+        errorCode === "access_denied"
       ) {
         throw new Error("User declined authorization.");
       }
       if (
-        err.message.includes("expired_token") ||
+        errorCode === "expired_token" ||
         err.message.includes("AADSTS70019")
       ) {
         throw new Error("Device code expired. Please try again.");

@@ -41,6 +41,7 @@ import {
   getTokenPath,
   getAccessToken,
   getTokenStatus,
+  authenticate,
   resolveScopes,
 } from "../auth.js";
 import type { AccountConfig } from "../types.js";
@@ -258,6 +259,52 @@ describe("auth", () => {
       expect(loadTokens(resolveAccount("work"))?.refresh_token).toBe("work-refresh");
       expect(loadTokens(resolveAccount("personal"))?.refresh_token).toBe("personal-refresh");
       expect(fetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("authenticate", () => {
+    it("continues polling when Microsoft returns authorization_pending", async () => {
+      addAccount("work", "tenant-1", "client-1");
+      const onPrompt = vi.fn();
+
+      vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            device_code: "device-code",
+            user_code: "ABCD-EFGH",
+            verification_uri: "https://microsoft.com/devicelogin",
+            expires_in: 60,
+            interval: 0,
+          }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          statusText: "Bad Request",
+          json: async () => ({
+            error: "authorization_pending",
+            error_description: "Waiting for the user to complete authentication.",
+          }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            access_token: "access-token",
+            refresh_token: "refresh-token",
+            expires_in: 3600,
+            scope: "openid offline_access",
+          }),
+        } as Response);
+
+      await expect(authenticate("work", onPrompt)).resolves.toMatchObject({
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      });
+      expect(onPrompt).toHaveBeenCalledWith(
+        "https://microsoft.com/devicelogin",
+        "ABCD-EFGH"
+      );
+      expect(fetch).toHaveBeenCalledTimes(3);
     });
   });
 
