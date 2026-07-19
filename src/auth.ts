@@ -180,7 +180,7 @@ async function httpsPost(url: string, body: URLSearchParams): Promise<any> {
   const data = await resp.json();
   if (!resp.ok) {
     throw new Error(
-      `Auth error: ${data.error_description ?? data.error ?? resp.statusText}`
+      `Auth error [${data.error}]: ${data.error_description ?? resp.statusText}`
     );
   }
   return data;
@@ -333,7 +333,10 @@ export async function authenticate(
       const tokens = await pollForToken(dc.device_code, config);
       return saveTokens(config, tokens);
     } catch (err: any) {
-      if (err.message.includes("authorization_pending")) {
+      if (
+        err.message.includes("authorization_pending") ||
+        err.message.includes("AADSTS70016")
+      ) {
         continue;
       }
       if (
