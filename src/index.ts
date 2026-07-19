@@ -91,6 +91,10 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
   if (name === "m365_contacts_create") return contactsTools.contacts_create(args as any);
   if (name === "m365_contacts_update") return contactsTools.contacts_update(args as any);
   if (name === "m365_contacts_delete") return contactsTools.contacts_delete(args as any);
+  if (name === "m365_contacts_folders_list") return contactsTools.contacts_folders_list(args as any);
+  if (name === "m365_contacts_folder_create") return contactsTools.contacts_folder_create(args as any);
+  if (name === "m365_contacts_folder_update") return contactsTools.contacts_folder_update(args as any);
+  if (name === "m365_contacts_folder_delete") return contactsTools.contacts_folder_delete(args as any);
 
   // Files
   if (name === "m365_files_list") return filesTools.files_list(args as any);

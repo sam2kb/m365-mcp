@@ -33,7 +33,7 @@ as reviewed on July 18, 2026.
 | Tasks | ✅ | ❌ | ✅ |
 | Users | ✅ | ❌ | ✅ |
 | Implementation | TypeScript | JavaScript CLI | TypeScript |
-| Interface coverage | 19 MCP tools | CLI scripts | **38 MCP tools** |
+| Interface coverage | 19 MCP tools | CLI scripts | **42 MCP tools** |
 
 `m365-mcp` does not store a client secret or password. Tenant and client IDs are
 non-secret identifiers; sensitive OAuth access and refresh tokens are stored
@@ -201,7 +201,7 @@ node dist/auth-cli.js list
 
 Each account needs its own App Registration in its respective tenant. Tokens are isolated per account.
 
-## Available Tools (38)
+## Available Tools (42)
 
 ### 📧 Mail (9 tools)
 | Tool | Description |
@@ -227,15 +227,21 @@ Each account needs its own App Registration in its respective tenant. Tokens are
 | `m365_calendar_delete` | Cancel event with message |
 | `m365_calendar_availability` | Free/busy lookup |
 
-### 👤 Contacts (6 tools)
+### 👤 Contacts (10 tools)
 | Tool | Description |
 |---|---|
-| `m365_contacts_list` | List contacts |
-| `m365_contacts_search` | Search by name/email/company |
+| `m365_contacts_list` | List by folder and filter by category |
+| `m365_contacts_search` | Search by name, email, or company |
 | `m365_contacts_read` | Full contact details |
-| `m365_contacts_create` | Create contact |
-| `m365_contacts_update` | Update contact |
-| `m365_contacts_delete` | Delete contact |
+| `m365_contacts_create` | Create with multiple emails, phones, categories, addresses, and work or personal details |
+| `m365_contacts_update` | Update or clear contact fields and category assignments |
+| `m365_contacts_delete` | Move a contact to Deleted Items |
+| `m365_contacts_folders_list` | List top-level or child contact folders |
+| `m365_contacts_folder_create` | Create a child contact folder |
+| `m365_contacts_folder_update` | Rename or move a contact folder |
+| `m365_contacts_folder_delete` | Delete a non-default contact folder |
+
+Outlook categories are tags stored on each contact; contact folders are containers. Category filtering is case-insensitive and can be combined with folder selection. Folder tools manage top-level folders and one direct child level, keeping the interface predictable.
 
 ### 📁 OneDrive (5 tools)
 | Tool | Description |

@@ -98,6 +98,8 @@ export interface Contact {
   homeAddress?: any;
   businessAddress?: any;
   personalNotes?: string;
+  categories?: string[];
+  parentFolderId?: string;
 }
 
 export interface DriveItem {
