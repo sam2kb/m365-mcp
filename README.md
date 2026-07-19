@@ -66,10 +66,13 @@ Organization-wide mail application permissions such as `Mail.Read.All` are not u
 2. **New registration**
    - Name: `m365-mcp`
    - Supported account types: **Single tenant** (or multi-tenant if you manage your own tenant)
-   - Redirect URI: `http://localhost` (not used for device code, but required)
+   - Redirect URI: leave this blank; device-code flow does not use one
 3. Click **Register**
-4. Go to **Authentication** → **Advanced settings** → set **"Allow public client flows"** to **Yes** → **Save**
-   > This is required for device-code OAuth to work without a client secret.
+4. Go to **Authentication** → **Advanced settings**
+5. Set **"Allow public client flows"** to **Yes**, then click **Save**
+
+> This is required for device-code OAuth. Do not create or configure a client
+> secret; `m365-mcp` is a public client.
 
 ### 2. Add API Permissions
 
@@ -123,6 +126,12 @@ npm run build
 m365-mcp-auth add work <tenant-id> <client-id> you@company.com "Work account"
 m365-mcp-auth login --account=work
 ```
+
+> **`AADSTS7000218` or a missing `client_secret` / `client_assertion` error:**
+> Microsoft is treating the registration as a confidential client. Confirm that
+> the configured Application (client) ID belongs to the registration you edited,
+> then return to **Authentication** and verify **Allow public client flows** is
+> saved as **Yes**. Do not work around this error by adding a client secret.
 
 When running from a source checkout, use `node dist/auth-cli.js` instead of
 `m365-mcp-auth`.
