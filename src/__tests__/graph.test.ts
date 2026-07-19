@@ -9,6 +9,7 @@ vi.mock("../auth.js", () => ({
   getAccessToken: vi.fn().mockResolvedValue("fake-token"),
 }));
 
+import { getAccessToken } from "../auth.js";
 import { GraphClient } from "../graph.js";
 
 // ─── helpers ────────────────────────────────────────────────────────
@@ -43,8 +44,9 @@ describe("GraphClient", () => {
   let client: GraphClient;
 
   beforeEach(() => {
-    client = new GraphClient("America/Chicago", "test-account");
     vi.restoreAllMocks();
+    vi.mocked(getAccessToken).mockResolvedValue("fake-token");
+    client = new GraphClient("America/Chicago", "test-account");
   });
 
   afterEach(() => {
@@ -262,6 +264,27 @@ describe("GraphClient", () => {
       mockFetch([{ status: 200, body: "hello world" }]);
       const content = await client.download("https://example.com/file.txt");
       expect(content).toBe("hello world");
+      expect(fetch).toHaveBeenCalledWith(
+        "https://example.com/file.txt",
+        { headers: {} }
+      );
+    });
+
+    it("sends the bearer token only to Microsoft Graph", async () => {
+      mockFetch([{ status: 200, body: "hello world" }]);
+      await client.download("https://graph.microsoft.com/v1.0/file.txt");
+      expect(fetch).toHaveBeenCalledWith(
+        "https://graph.microsoft.com/v1.0/file.txt",
+        { headers: { Authorization: "Bearer fake-token" } }
+      );
+    });
+
+    it("rejects non-HTTPS downloads before sending a request", async () => {
+      mockFetch([{ status: 200, body: "should not download" }]);
+      await expect(client.download("http://example.com/file.txt")).rejects.toThrow(
+        "Download URL must use HTTPS"
+      );
+      expect(fetch).not.toHaveBeenCalled();
     });
 
     it("truncates to maxBytes", async () => {

@@ -179,14 +179,25 @@ export class GraphClient {
 
   /** Download raw file content with retry on transient failures */
   async download(url: string, maxBytes = 50_000): Promise<string> {
-    const token = await getAccessToken(this.accountName);
+    const downloadUrl = new URL(url);
+    if (downloadUrl.protocol !== "https:") {
+      throw new Error("Download URL must use HTTPS");
+    }
+
+    // Graph may return a pre-authenticated SharePoint/OneDrive download URL.
+    // Never forward the Microsoft Graph bearer token to another origin.
+    const headers: HeadersInit = {};
+    if (downloadUrl.origin === new URL(GRAPH_BASE).origin) {
+      const token = await getAccessToken(this.accountName);
+      headers.Authorization = `Bearer ${token}`;
+    }
 
     let attempt = 0;
     let delay = RETRY_BACKOFF_MS;
 
     while (true) {
       const resp = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
       });
 
       if (resp.status === 429 && attempt < MAX_RETRIES) {
