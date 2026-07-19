@@ -1,5 +1,8 @@
 # m365-mcp
 
+[![npm](https://img.shields.io/npm/v/%40sam2kb%2Fm365-mcp?logo=npm&label=npm)](https://www.npmjs.com/package/@sam2kb/m365-mcp)
+[![ClawHub](https://img.shields.io/badge/ClawHub-m365--mcp-f97316)](https://clawhub.ai/sam2kb/skills/m365-mcp)
+
 **Production-grade Microsoft 365 MCP server** — Email, Calendar, Contacts, OneDrive, Teams, Tasks, and Users via delegated OAuth.
 
 Built from the best of both `office365-connector` (delegated OAuth, multi-account) and `mcp-microsoft365` (MCP protocol, full scope), with all the gaps fixed: pagination, rate limiting, retry logic, proper timezone handling, and TypeScript throughout.
