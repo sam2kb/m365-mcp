@@ -22,11 +22,18 @@ import { registerFilesTools, filesToolSchemas } from "./tools/files.js";
 import { registerTeamsTools, teamsToolSchemas } from "./tools/teams.js";
 import { registerTasksTools, tasksToolSchemas } from "./tools/tasks.js";
 import { registerUsersTools, usersToolSchemas } from "./tools/users.js";
+import {
+  annotateTools,
+  assertToolAllowed,
+  envFlag,
+  toolsForMode,
+} from "./security.js";
 
 // ─── Config ──────────────────────────────────────────────────────────
 
 const ACCOUNT_NAME = process.env.M365_ACCOUNT || undefined;
 const TIMEZONE = process.env.M365_TIMEZONE || "UTC";
+const READ_ONLY = envFlag(process.env.M365_MCP_READ_ONLY);
 
 // ─── Init ────────────────────────────────────────────────────────────
 
@@ -42,7 +49,7 @@ const usersTools = registerUsersTools(client);
 
 // ─── Tool catalog ────────────────────────────────────────────────────
 
-const allTools = [
+const allTools = toolsForMode(annotateTools([
   ...mailToolSchemas,
   ...calendarToolSchemas,
   ...contactsToolSchemas,
@@ -50,11 +57,13 @@ const allTools = [
   ...teamsToolSchemas,
   ...tasksToolSchemas,
   ...usersToolSchemas,
-];
+]), READ_ONLY);
 
 // ─── Tool router ─────────────────────────────────────────────────────
 
 async function handleToolCall(name: string, args: Record<string, unknown>): Promise<string> {
+  assertToolAllowed(name, READ_ONLY);
+
   // Mail
   if (name === "m365_mail_list") return mailTools.mail_list(args as any);
   if (name === "m365_mail_read") return mailTools.mail_read(args as any);
@@ -140,7 +149,7 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
-    `m365-mcp v1.0.0 running (account: ${ACCOUNT_NAME ?? "default"}, tz: ${TIMEZONE})`
+    `m365-mcp v1.0.0 running (account: ${ACCOUNT_NAME ?? "default"}, tz: ${TIMEZONE}, read-only: ${READ_ONLY})`
   );
 }
 

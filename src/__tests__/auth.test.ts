@@ -41,6 +41,7 @@ import {
   getTokenPath,
   getAccessToken,
   getTokenStatus,
+  resolveScopes,
 } from "../auth.js";
 import type { AccountConfig } from "../types.js";
 
@@ -297,6 +298,24 @@ describe("auth", () => {
 
     it("honors M365_MCP_AUTH_DIR", () => {
       expect(resolveAuthDir({ M365_MCP_AUTH_DIR: "/srv/m365-auth" }, "/unused")).toBe("/srv/m365-auth");
+    });
+  });
+
+  describe("resolveScopes", () => {
+    it("requests least-privilege read scopes in read-only mode", () => {
+      const scopes = resolveScopes({ M365_MCP_READ_ONLY: "true" }).split(" ");
+      expect(scopes).toContain("Mail.Read");
+      expect(scopes).toContain("Tasks.Read");
+      expect(scopes).not.toContain("Mail.Send");
+      expect(scopes).not.toContain("Mail.ReadWrite");
+      expect(scopes).not.toContain("Tasks.ReadWrite");
+    });
+
+    it("preserves write scopes by default", () => {
+      const scopes = resolveScopes({}).split(" ");
+      expect(scopes).toContain("Mail.Send");
+      expect(scopes).toContain("Calendars.ReadWrite");
+      expect(scopes).toContain("Chat.ReadWrite");
     });
   });
 

@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import type { AccountConfig, AccountsStore, TokenData } from "./types.js";
+import { envFlag } from "./security.js";
 
 export function resolveAuthDir(
   env: NodeJS.ProcessEnv = process.env,
@@ -22,22 +23,34 @@ const AUTH_DIR = resolveAuthDir();
 const ACCOUNTS_PATH = path.join(AUTH_DIR, "accounts.json");
 const TOKENS_DIR = path.join(AUTH_DIR, "tokens");
 
-// Scopes for delegated access — reads/writes YOUR data only, not the whole tenant
-const SCOPES = [
-  "offline_access",
-  "User.Read",
-  "Mail.Read",
-  "Mail.ReadWrite",
-  "Mail.Send",
-  "Calendars.Read",
-  "Calendars.ReadWrite",
-  "Contacts.Read",
-  "Contacts.ReadWrite",
-  "Files.Read.All",
-  "Tasks.ReadWrite",
-  "Chat.Read",
-  "Chat.ReadWrite",
-].join(" ");
+// Scopes for delegated access — reads/writes YOUR data only, not the whole tenant.
+export function resolveScopes(env: NodeJS.ProcessEnv = process.env): string {
+  const scopes = [
+    "offline_access",
+    "User.Read",
+    "Mail.Read",
+    "Calendars.Read",
+    "Contacts.Read",
+    "Files.Read.All",
+    "Tasks.Read",
+    "Chat.Read",
+  ];
+
+  if (!envFlag(env.M365_MCP_READ_ONLY)) {
+    scopes.push(
+      "Mail.ReadWrite",
+      "Mail.Send",
+      "Calendars.ReadWrite",
+      "Contacts.ReadWrite",
+      "Tasks.ReadWrite",
+      "Chat.ReadWrite"
+    );
+  }
+
+  return scopes.join(" ");
+}
+
+const SCOPES = resolveScopes();
 
 // ─── helpers ────────────────────────────────────────────────────────
 
