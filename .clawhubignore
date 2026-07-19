@@ -4,6 +4,7 @@ LICENSE
 package-lock.json
 package.json
 README.md
+security-report/
 src/
 tsconfig.json
 vitest.config.ts

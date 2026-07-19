@@ -35,7 +35,11 @@ Built from the best of both `office365-connector` (delegated OAuth, multi-accoun
 - `Chat.Read` / `Chat.ReadWrite` (Teams)
 - `User.Read` + `offline_access`
 
-No tenant-wide `Mail.Read.All` or `Files.Read.All` needed.
+These are delegated scopes, not tenant-wide application permissions. Set
+`M365_MCP_READ_ONLY=true` before authentication and when running the server to
+request only the read variants and disable mutating MCP tools.
+
+Organization-wide mail application permissions such as `Mail.Read.All` are not used.
 
 ## Setup
 
@@ -106,7 +110,10 @@ m365-mcp-auth login --account=work
 When running from a source checkout, use `node dist/auth-cli.js` instead of
 `m365-mcp-auth`.
 
-Follow the on-screen URL + code to sign in. Tokens are stored securely in `~/.m365-mcp/auth/` by default. Set `M365_MCP_AUTH_DIR` to use another location.
+Follow the on-screen URL + code to sign in. Access and refresh tokens are stored
+as plaintext JSON in `~/.m365-mcp/auth/` by default, protected with directory
+mode `0700` and file mode `0600` where supported. Set `M365_MCP_AUTH_DIR` to
+use another protected location.
 
 ### 5. Configure an MCP Client
 
@@ -246,11 +253,34 @@ npm run build  # compile TypeScript
 
 ## Security
 
-- **Delegated OAuth** — app acts as the authenticated user. No tenant-wide access.
+- **Delegated OAuth** — the app acts as the authenticated user; it does not use
+  application credentials or tenant-wide mail permissions.
 - **Device code flow** — you never type your password into anything but Microsoft's login page.
-- **Tokens stored with 0600 permissions** in `~/.m365-mcp/auth/` by default, configurable with `M365_MCP_AUTH_DIR`.
+- **Sensitive reads** — mail, files, calendar entries, contacts, Teams messages,
+  tasks, and user profiles can enter the MCP client's model context.
+- **Real side effects** — send, reply, move, create, update, and delete tools
+  change Microsoft 365 data. Configure your MCP client to require explicit user
+  approval before it invokes them.
+- **MCP safety annotations** — every tool declares read-only, destructive,
+  idempotent, and open-world hints for clients that enforce tool policies.
+- **Enforced read-only mode** — set `M365_MCP_READ_ONLY=true` both when
+  authenticating and running the server. The auth flow requests read-only Graph
+  scopes, mutating tools are omitted from discovery, and direct calls are blocked.
+- **Local token storage** — access and refresh tokens are plaintext JSON protected
+  by `0700` directories and `0600` files where supported. Protect
+  `~/.m365-mcp/auth/` or your configured `M365_MCP_AUTH_DIR`.
 - **Auto-refresh** — tokens refreshed before expiry, expired refresh tokens trigger re-auth.
 - **No telemetry, no analytics, no third-party calls** besides `login.microsoftonline.com` and `graph.microsoft.com`.
+
+To delete a local token, remove its account:
+
+```bash
+m365-mcp-auth remove work
+```
+
+If a token or device may be compromised, also revoke the application's consent
+from the Microsoft account or Entra ID portal. Re-authenticate after changing
+`M365_MCP_READ_ONLY` so the stored token reflects the intended scope set.
 
 ## License
 

@@ -8,6 +8,19 @@ metadata:
       bins:
         - m365-mcp
         - m365-mcp-auth
+    envVars:
+      - name: M365_ACCOUNT
+        required: false
+        description: Optional account name selected from the local account store.
+      - name: M365_TIMEZONE
+        required: false
+        description: Optional IANA timezone for calendar operations; defaults to UTC.
+      - name: M365_MCP_AUTH_DIR
+        required: false
+        description: Optional absolute path for the local OAuth account and token store.
+      - name: M365_MCP_READ_ONLY
+        required: false
+        description: Set true to request read-only scopes and disable all mutating tools.
     install:
       - kind: node
         package: "@sam2kb/m365-mcp"
@@ -55,6 +68,24 @@ Production-grade Microsoft 365 MCP server combining the best of office365-connec
 ### Users (3 tools)
 
 - List org users, profile lookup, manager lookup
+
+## Security and consent
+
+- The server contacts only Microsoft's OAuth and Graph services:
+  `login.microsoftonline.com` and `graph.microsoft.com`.
+- Device-code OAuth grants delegated access as the signed-in user. Read tools can
+  expose private mail, files, calendars, contacts, Teams chats, tasks, and user data.
+- Send, reply, move, create, update, and delete tools change real Microsoft 365
+  data. Configure the MCP client to require explicit user approval for those tools.
+- Tools publish standard MCP read-only, destructive, idempotent, and open-world
+  annotations so compatible clients can apply confirmation policies.
+- Set `M365_MCP_READ_ONLY=true` for an enforced least-privilege mode. It requests
+  read-only OAuth scopes, omits mutating tools from discovery, and rejects direct
+  calls to them.
+- Refresh and access tokens are stored as plaintext JSON under
+  `~/.m365-mcp/auth/` (or `M365_MCP_AUTH_DIR`), protected with directory mode
+  `0700` and file mode `0600` where supported. Protect that directory and revoke
+  the app's Microsoft account consent if a token or device is compromised.
 
 ## Setup
 
