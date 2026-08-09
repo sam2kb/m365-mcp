@@ -31,6 +31,7 @@ export function resolveScopes(env: NodeJS.ProcessEnv = process.env): string {
     "Mail.Read",
     "Calendars.Read",
     "Contacts.Read",
+    "People.Read",
     "Files.Read.All",
     "Tasks.Read",
     "Chat.Read",

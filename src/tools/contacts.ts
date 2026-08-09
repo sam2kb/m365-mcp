@@ -315,6 +315,26 @@ export function registerContactsTools(client: GraphClient) {
       await client.delete(folderResourcePath(args.folderId, args.parentFolderId));
       return JSON.stringify({ success: true, folderId: args.folderId });
     },
+
+    async contacts_people_list(args: { top?: number; search?: string } = {}): Promise<string> {
+      const top = normalizeTop(args.top, 100);
+      let path = `/me/people?$top=${Math.min(top, 100)}`;
+      if (args.search) path += `&$search=%22${encodeURIComponent(args.search)}%22`;
+      const people = await client.getAll<any>(path, 10, top);
+      return JSON.stringify(
+        people.map((p) => ({
+          id: p.id,
+          displayName: p.displayName,
+          givenName: p.givenName,
+          surname: p.surname,
+          email: p.scoredEmailAddresses?.[0]?.address ?? p.emailAddresses?.[0]?.address,
+          personType: p.personType,
+          sources: p.sources ?? p.personType,
+        })),
+        null,
+        2
+      );
+    },
   };
 }
 
@@ -427,5 +447,10 @@ export const contactsToolSchemas = [
   {
     name: "m365_contacts_folder_delete", description: "Delete a non-default top-level or direct-child contact folder",
     inputSchema: { type: "object", properties: { folderId: { type: "string" }, parentFolderId: { type: "string", description: "Current parent when this is a child folder" } }, required: ["folderId"] },
+  },
+  {
+    name: "m365_contacts_people_list",
+    description: "List people from the People API (includes contacts, contact lists, and directory), optionally filtered by search",
+    inputSchema: { type: "object", properties: { top: { type: "number", minimum: 1, maximum: 500, default: 100 }, search: { type: "string", description: "Search by name or email" } } },
   },
 ];

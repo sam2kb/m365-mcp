@@ -222,8 +222,48 @@ describe("contacts tools", () => {
     );
   });
 
-  it("exposes 11 contact tool schemas", () => {
-    expect(contactsToolSchemas).toHaveLength(11);
-    expect(new Set(contactsToolSchemas.map((schema) => schema.name)).size).toBe(11);
+  it("exposes 12 contact tool schemas", () => {
+    expect(contactsToolSchemas).toHaveLength(12);
+    expect(new Set(contactsToolSchemas.map((schema) => schema.name)).size).toBe(12);
+    expect(contactsToolSchemas.some((schema) => schema.name === "m365_contacts_people_list")).toBe(true);
+  });
+
+  it("lists people from the People API with optional search", async () => {
+    (client.getAll as any).mockResolvedValue([{
+      id: "p1",
+      displayName: "Bob Smith",
+      givenName: "Bob",
+      surname: "Smith",
+      scoredEmailAddresses: [{ address: "bob@example.com" }],
+      personType: { class: "Person", subclass: "DirectoryPerson" },
+      sources: [{ type: "Directory" }],
+    }]);
+
+    const parsed = JSON.parse(await tools.contacts_people_list({ top: 25, search: "bob" }));
+    expect(client.getAll).toHaveBeenCalledWith(
+      "/me/people?$top=25&$search=%22bob%22",
+      10,
+      25
+    );
+    expect(parsed[0]).toMatchObject({
+      id: "p1",
+      displayName: "Bob Smith",
+      email: "bob@example.com",
+      personType: { class: "Person", subclass: "DirectoryPerson" },
+    });
+  });
+
+  it("falls back to emailAddresses and personType for people without scored emails or sources", async () => {
+    (client.getAll as any).mockResolvedValue([{
+      id: "p2",
+      displayName: "Carol",
+      emailAddresses: [{ address: "carol@example.com" }],
+      personType: { class: "Person", subclass: "Contact" },
+    }]);
+
+    const parsed = JSON.parse(await tools.contacts_people_list({}));
+    expect(client.getAll).toHaveBeenCalledWith("/me/people?$top=100", 10, 100);
+    expect(parsed[0].email).toBe("carol@example.com");
+    expect(parsed[0].sources).toEqual({ class: "Person", subclass: "Contact" });
   });
 });
