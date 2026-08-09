@@ -36,7 +36,8 @@ export class GraphClient {
     path: string,
     method = "GET",
     body?: unknown,
-    raw = false
+    raw = false,
+    additionalHeaders: Readonly<Record<string, string>> = {}
   ): Promise<T> {
     const token = await getAccessToken(this.accountName);
     const url = path.startsWith("https://") ? path : `${GRAPH_BASE}${path}`;
@@ -51,6 +52,7 @@ export class GraphClient {
       const opts: RequestInit = {
         method,
         headers: {
+          ...additionalHeaders,
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           Accept: "application/json",
@@ -128,19 +130,33 @@ export class GraphClient {
   // ─── public methods ──────────────────────────────────────────────
 
   /** Single-page GET */
-  async get<T>(path: string): Promise<T> {
-    return this.request<T>(path);
+  async get<T>(
+    path: string,
+    additionalHeaders: Readonly<Record<string, string>> = {}
+  ): Promise<T> {
+    return this.request<T>(path, "GET", undefined, false, additionalHeaders);
   }
 
   /** GET that follows @odata.nextLink pagination, collecting all results */
-  async getAll<T>(path: string, maxPages = 10, maxItems = Infinity): Promise<T[]> {
+  async getAll<T>(
+    path: string,
+    maxPages = 10,
+    maxItems = Infinity,
+    additionalHeaders: Readonly<Record<string, string>> = {}
+  ): Promise<T[]> {
     const results: T[] = [];
     let url: string | undefined = path;
     let pages = 0;
 
     while (url && pages < maxPages && results.length < maxItems) {
       // If url is a nextLink, it's already absolute
-      const data: GraphListResponse<T> = await this.request<GraphListResponse<T>>(url);
+      const data: GraphListResponse<T> = await this.request<GraphListResponse<T>>(
+        url,
+        "GET",
+        undefined,
+        false,
+        additionalHeaders
+      );
       if (data.value) results.push(...data.value.slice(0, maxItems - results.length));
       url = data["@odata.nextLink"];
       pages++;
@@ -150,12 +166,22 @@ export class GraphClient {
   }
 
   /** Paginated GET — yields pages lazily */
-  async *paginate<T>(path: string, maxPages = 10): AsyncGenerator<T[]> {
+  async *paginate<T>(
+    path: string,
+    maxPages = 10,
+    additionalHeaders: Readonly<Record<string, string>> = {}
+  ): AsyncGenerator<T[]> {
     let url: string | undefined = path;
     let pages = 0;
 
     while (url && pages < maxPages) {
-      const data: GraphListResponse<T> = await this.request<GraphListResponse<T>>(url);
+      const data: GraphListResponse<T> = await this.request<GraphListResponse<T>>(
+        url,
+        "GET",
+        undefined,
+        false,
+        additionalHeaders
+      );
       if (data.value) yield data.value;
       url = data["@odata.nextLink"];
       pages++;

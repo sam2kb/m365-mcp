@@ -200,6 +200,34 @@ describe("GraphClient", () => {
       expect(results.map((result: any) => result.id)).toEqual(["1", "2"]);
       expect(fetchCount).toBe(1);
     });
+
+    it("preserves additional GET headers across pagination", async () => {
+      let fetchCount = 0;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+        fetchCount++;
+        const headers = new Headers(options?.headers);
+        expect(headers.get("X-PeopleQuery-QuerySources")).toBe("Mailbox,Directory");
+        expect(headers.get("Authorization")).toBe("Bearer fake-token");
+        return {
+          status: 200,
+          ok: true,
+          headers: new Headers({ "Content-Type": "application/json" }),
+          json: async () => ({
+            value: [{ id: String(fetchCount) }],
+            ...(fetchCount === 1
+              ? { "@odata.nextLink": "https://graph.microsoft.com/v1.0/next" }
+              : {}),
+          }),
+        } as Response;
+      });
+
+      const results = await client.getAll("/test", 5, 10, {
+        "X-PeopleQuery-QuerySources": "Mailbox,Directory",
+        Authorization: "do-not-use-this-token",
+      });
+      expect(results.map((result: any) => result.id)).toEqual(["1", "2"]);
+      expect(fetchCount).toBe(2);
+    });
   });
 
   // ── paginate (generator) ─────────────────────────────────────────

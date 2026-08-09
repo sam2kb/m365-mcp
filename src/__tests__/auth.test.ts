@@ -353,6 +353,7 @@ describe("auth", () => {
       const scopes = resolveScopes({ M365_MCP_READ_ONLY: "true" }).split(" ");
       expect(scopes).toContain("Mail.Read");
       expect(scopes).toContain("Tasks.Read");
+      expect(scopes).toContain("People.Read");
       expect(scopes).not.toContain("Mail.Send");
       expect(scopes).not.toContain("Mail.ReadWrite");
       expect(scopes).not.toContain("Tasks.ReadWrite");

@@ -222,10 +222,24 @@ describe("contacts tools", () => {
     );
   });
 
-  it("exposes 12 contact tool schemas", () => {
+  it("exposes 12 contact tool schemas with an accurate People API description", () => {
     expect(contactsToolSchemas).toHaveLength(12);
     expect(new Set(contactsToolSchemas.map((schema) => schema.name)).size).toBe(12);
-    expect(contactsToolSchemas.some((schema) => schema.name === "m365_contacts_people_list")).toBe(true);
+    const peopleSchema = contactsToolSchemas.find(
+      (schema) => schema.name === "m365_contacts_people_list"
+    );
+    expect(peopleSchema?.description).toContain("does not expose private Outlook Contact Lists");
+    expect((peopleSchema?.inputSchema as any).properties.source.enum).toEqual([
+      "mailbox",
+      "directory",
+      "both",
+    ]);
+    expect((peopleSchema?.inputSchema as any).properties.personType.enum).toEqual([
+      "any",
+      "organizationUser",
+      "personalContact",
+      "group",
+    ]);
   });
 
   it("lists people from the People API with optional search", async () => {
@@ -234,36 +248,100 @@ describe("contacts tools", () => {
       displayName: "Bob Smith",
       givenName: "Bob",
       surname: "Smith",
-      scoredEmailAddresses: [{ address: "bob@example.com" }],
-      personType: { class: "Person", subclass: "DirectoryPerson" },
-      sources: [{ type: "Directory" }],
+      userPrincipalName: "bob@contoso.com",
+      scoredEmailAddresses: [{ address: "bob@example.com", relevanceScore: 20 }],
+      personType: { class: "Person", subclass: "OrganizationUser" },
     }]);
 
     const parsed = JSON.parse(await tools.contacts_people_list({ top: 25, search: "bob" }));
+    const path = (client.getAll as any).mock.calls[0][0] as string;
+    expect(path).toContain("/me/people?$top=25");
+    expect(path).toContain("$select=id,displayName,givenName,surname,userPrincipalName,scoredEmailAddresses,personType");
+    expect(path).toContain("$search=%22bob%22");
     expect(client.getAll).toHaveBeenCalledWith(
-      "/me/people?$top=25&$search=%22bob%22",
+      path,
       10,
-      25
+      25,
+      { "X-PeopleQuery-QuerySources": "Mailbox" }
     );
-    expect(parsed[0]).toMatchObject({
+    expect(parsed[0]).toEqual({
       id: "p1",
       displayName: "Bob Smith",
+      givenName: "Bob",
+      surname: "Smith",
       email: "bob@example.com",
-      personType: { class: "Person", subclass: "DirectoryPerson" },
+      relevanceScore: 20,
+      personType: { class: "Person", subclass: "OrganizationUser" },
     });
+    expect(parsed[0]).not.toHaveProperty("sources");
   });
 
-  it("falls back to emailAddresses and personType for people without scored emails or sources", async () => {
+  it("uses documented userPrincipalName when no scored email is returned", async () => {
     (client.getAll as any).mockResolvedValue([{
       id: "p2",
       displayName: "Carol",
-      emailAddresses: [{ address: "carol@example.com" }],
-      personType: { class: "Person", subclass: "Contact" },
+      userPrincipalName: "carol@example.com",
+      scoredEmailAddresses: [],
+      personType: { class: "Person", subclass: "OrganizationUser" },
     }]);
 
     const parsed = JSON.parse(await tools.contacts_people_list({}));
-    expect(client.getAll).toHaveBeenCalledWith("/me/people?$top=100", 10, 100);
+    expect(client.getAll).toHaveBeenCalledWith(
+      expect.stringContaining("/me/people?$top=100&$select="),
+      10,
+      100,
+      { "X-PeopleQuery-QuerySources": "Mailbox" }
+    );
     expect(parsed[0].email).toBe("carol@example.com");
-    expect(parsed[0].sources).toEqual({ class: "Person", subclass: "Contact" });
+    expect(parsed[0]).not.toHaveProperty("sources");
+  });
+
+  it("can include the directory, filter identity type, and return profile fields", async () => {
+    (client.getAll as any).mockResolvedValue([{
+      id: "p3",
+      displayName: "Dana Lee",
+      scoredEmailAddresses: [{ address: "dana@example.com", relevanceScore: 42 }],
+      personType: { class: "Person", subclass: "OrganizationUser" },
+      companyName: "Contoso",
+      department: "Finance",
+      jobTitle: "Controller",
+      officeLocation: "NYC",
+      phones: [{ type: "Business", number: "+1 555 0100" }],
+    }]);
+
+    const parsed = JSON.parse(await tools.contacts_people_list({
+      source: "both",
+      personType: "organizationUser",
+      includeProfile: true,
+    }));
+    const path = (client.getAll as any).mock.calls[0][0] as string;
+    expect(path).toContain("companyName,department,jobTitle,officeLocation,phones");
+    expect(path).toContain(
+      `$filter=${encodeURIComponent("personType/class eq 'Person' and personType/subclass eq 'OrganizationUser'")}`
+    );
+    expect(client.getAll).toHaveBeenCalledWith(
+      path,
+      10,
+      100,
+      { "X-PeopleQuery-QuerySources": "Mailbox,Directory" }
+    );
+    expect(parsed[0]).toMatchObject({
+      email: "dana@example.com",
+      relevanceScore: 42,
+      companyName: "Contoso",
+      department: "Finance",
+      jobTitle: "Controller",
+      officeLocation: "NYC",
+      phones: [{ type: "Business", number: "+1 555 0100" }],
+    });
+  });
+
+  it("rejects unsupported People API source and identity filters", async () => {
+    await expect(
+      tools.contacts_people_list({ source: "external" } as any)
+    ).rejects.toThrow("source must be");
+    await expect(
+      tools.contacts_people_list({ personType: "contactList" } as any)
+    ).rejects.toThrow("personType must be");
   });
 });

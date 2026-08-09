@@ -22,6 +22,11 @@ describe("security controls", () => {
       destructiveHint: false,
       openWorldHint: true,
     });
+    expect(toolSafetyAnnotations("m365_contacts_people_list")).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
     expect(toolSafetyAnnotations("m365_teams_send")).toMatchObject({
       readOnlyHint: false,
       destructiveHint: false,

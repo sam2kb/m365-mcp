@@ -66,6 +66,71 @@ interface ContactFolder {
   childFolderCount?: number;
 }
 
+interface GraphPerson {
+  id: string;
+  displayName?: string;
+  givenName?: string;
+  surname?: string;
+  userPrincipalName?: string;
+  companyName?: string;
+  department?: string;
+  jobTitle?: string;
+  officeLocation?: string;
+  phones?: Array<{
+    type?: string;
+    number?: string;
+  }>;
+  scoredEmailAddresses?: Array<{
+    address?: string;
+    relevanceScore?: number;
+  }>;
+  personType?: {
+    class?: string;
+    subclass?: string;
+  };
+}
+
+type PeopleSource = "mailbox" | "directory" | "both";
+type PeoplePersonType = "any" | "organizationUser" | "personalContact" | "group";
+
+interface PeopleListInput {
+  top?: number;
+  search?: string;
+  source?: PeopleSource;
+  personType?: PeoplePersonType;
+  includeProfile?: boolean;
+}
+
+const PEOPLE_BASIC_FIELDS = [
+  "id",
+  "displayName",
+  "givenName",
+  "surname",
+  "userPrincipalName",
+  "scoredEmailAddresses",
+  "personType",
+] as const;
+
+const PEOPLE_PROFILE_FIELDS = [
+  "companyName",
+  "department",
+  "jobTitle",
+  "officeLocation",
+  "phones",
+] as const;
+
+const PEOPLE_SOURCE_HEADERS: Record<PeopleSource, string> = {
+  mailbox: "Mailbox",
+  directory: "Directory",
+  both: "Mailbox,Directory",
+};
+
+const PEOPLE_TYPE_FILTERS: Record<Exclude<PeoplePersonType, "any">, string> = {
+  organizationUser: "personType/class eq 'Person' and personType/subclass eq 'OrganizationUser'",
+  personalContact: "personType/class eq 'Person' and personType/subclass eq 'PersonalContact'",
+  group: "personType/class eq 'Group'",
+};
+
 const CONTACT_STRING_FIELDS = [
   "givenName", "middleName", "surname", "title", "generation", "displayName",
   "nickName", "mobilePhone", "jobTitle", "department", "officeLocation",
@@ -87,6 +152,24 @@ function normalizeTop(value: number | undefined, fallback: number): number {
     throw new Error("top must be an integer between 1 and 500");
   }
   return value;
+}
+
+function normalizePeopleSource(value: PeopleSource | undefined): PeopleSource {
+  const source = value ?? "mailbox";
+  if (!Object.hasOwn(PEOPLE_SOURCE_HEADERS, source)) {
+    throw new Error('source must be "mailbox", "directory", or "both"');
+  }
+  return source;
+}
+
+function normalizePeoplePersonType(value: PeoplePersonType | undefined): PeoplePersonType {
+  const personType = value ?? "any";
+  if (personType !== "any" && !Object.hasOwn(PEOPLE_TYPE_FILTERS, personType)) {
+    throw new Error(
+      'personType must be "any", "organizationUser", "personalContact", or "group"'
+    );
+  }
+  return personType;
 }
 
 function contactCollectionPath(location: ContactLocation): string {
@@ -316,21 +399,45 @@ export function registerContactsTools(client: GraphClient) {
       return JSON.stringify({ success: true, folderId: args.folderId });
     },
 
-    async contacts_people_list(args: { top?: number; search?: string } = {}): Promise<string> {
+    async contacts_people_list(args: PeopleListInput = {}): Promise<string> {
       const top = normalizeTop(args.top, 100);
-      let path = `/me/people?$top=${Math.min(top, 100)}`;
-      if (args.search) path += `&$search=%22${encodeURIComponent(args.search)}%22`;
-      const people = await client.getAll<any>(path, 10, top);
+      const source = normalizePeopleSource(args.source);
+      const personType = normalizePeoplePersonType(args.personType);
+      const fields = args.includeProfile
+        ? [...PEOPLE_BASIC_FIELDS, ...PEOPLE_PROFILE_FIELDS]
+        : [...PEOPLE_BASIC_FIELDS];
+      const query = [
+        `$top=${Math.min(top, 100)}`,
+        `$select=${fields.join(",")}`,
+      ];
+      if (args.search) query.push(`$search=%22${encodeURIComponent(args.search)}%22`);
+      if (personType !== "any") {
+        query.push(`$filter=${encodeURIComponent(PEOPLE_TYPE_FILTERS[personType])}`);
+      }
+      const path = `/me/people?${query.join("&")}`;
+      const people = await client.getAll<GraphPerson>(path, 10, top, {
+        "X-PeopleQuery-QuerySources": PEOPLE_SOURCE_HEADERS[source],
+      });
       return JSON.stringify(
-        people.map((p) => ({
-          id: p.id,
-          displayName: p.displayName,
-          givenName: p.givenName,
-          surname: p.surname,
-          email: p.scoredEmailAddresses?.[0]?.address ?? p.emailAddresses?.[0]?.address,
-          personType: p.personType,
-          sources: p.sources ?? p.personType,
-        })),
+        people.map((person) => {
+          const primaryEmail = person.scoredEmailAddresses?.[0];
+          return {
+            id: person.id,
+            displayName: person.displayName,
+            givenName: person.givenName,
+            surname: person.surname,
+            email: primaryEmail?.address ?? person.userPrincipalName,
+            relevanceScore: primaryEmail?.relevanceScore,
+            personType: person.personType,
+            ...(args.includeProfile ? {
+              companyName: person.companyName,
+              department: person.department,
+              jobTitle: person.jobTitle,
+              officeLocation: person.officeLocation,
+              phones: person.phones ?? [],
+            } : {}),
+          };
+        }),
         null,
         2
       );
@@ -450,7 +557,30 @@ export const contactsToolSchemas = [
   },
   {
     name: "m365_contacts_people_list",
-    description: "List people from the People API (includes contacts, contact lists, and directory), optionally filtered by search",
-    inputSchema: { type: "object", properties: { top: { type: "number", minimum: 1, maximum: 500, default: 100 }, search: { type: "string", description: "Search by name or email" } } },
+    description: "Find relevance-ranked people for recipient selection using mailbox signals, the organization directory, or both; does not expose private Outlook Contact Lists",
+    inputSchema: {
+      type: "object",
+      properties: {
+        top: { type: "number", minimum: 1, maximum: 500, default: 100 },
+        search: { type: "string", description: "Fuzzy search by name or email alias" },
+        source: {
+          type: "string",
+          enum: ["mailbox", "directory", "both"],
+          default: "mailbox",
+          description: "Search mailbox-relevant people, the organization directory, or both",
+        },
+        personType: {
+          type: "string",
+          enum: ["any", "organizationUser", "personalContact", "group"],
+          default: "any",
+          description: "Limit results to one documented People API identity type",
+        },
+        includeProfile: {
+          type: "boolean",
+          default: false,
+          description: "Include company, department, job title, office, and phone details",
+        },
+      },
+    },
   },
 ];

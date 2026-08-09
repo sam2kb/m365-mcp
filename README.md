@@ -33,7 +33,7 @@ as reviewed on July 18, 2026.
 | Tasks | ✅ | ❌ | ✅ |
 | Users | ✅ | ❌ | ✅ |
 | Implementation | TypeScript | JavaScript CLI | TypeScript |
-| Interface coverage | 19 MCP tools | CLI scripts | **43 MCP tools** |
+| Interface coverage | 19 MCP tools | CLI scripts | **44 MCP tools** |
 
 `m365-mcp` does not store a client secret or password. Tenant and client IDs are
 non-secret identifiers; sensitive OAuth access and refresh tokens are stored
@@ -47,6 +47,7 @@ the storage and revocation details.
 - `Mail.Read` / `Mail.ReadWrite` / `Mail.Send`
 - `Calendars.Read` / `Calendars.ReadWrite`
 - `Contacts.Read` / `Contacts.ReadWrite`
+- `People.Read` (relevance-ranked people search)
 - `Files.Read.All` (your OneDrive)
 - `Tasks.ReadWrite` (To Do)
 - `Chat.Read` / `Chat.ReadWrite` (Teams)
@@ -88,6 +89,7 @@ Calendars.Read
 Calendars.ReadWrite
 Contacts.Read
 Contacts.ReadWrite
+People.Read
 Files.Read.All
 Tasks.ReadWrite
 Chat.Read
@@ -227,7 +229,7 @@ Each account needs its own App Registration in its respective tenant. Tokens are
 | `m365_calendar_delete` | Cancel event with message |
 | `m365_calendar_availability` | Free/busy lookup |
 
-### 👤 Contacts (11 tools)
+### 👤 Contacts (12 tools)
 | Tool | Description |
 |---|---|
 | `m365_contacts_list` | List by folder and filter by one or more exact categories (any/all) |
@@ -241,8 +243,16 @@ Each account needs its own App Registration in its respective tenant. Tokens are
 | `m365_contacts_folder_create` | Create a child contact folder |
 | `m365_contacts_folder_update` | Rename or move a contact folder |
 | `m365_contacts_folder_delete` | Delete a non-default contact folder |
+| `m365_contacts_people_list` | Fuzzy-search relevance-ranked recipients from mailbox signals, the organization directory, or both; filter identity type and optionally include profile details |
 
 Outlook categories are tags stored on each contact; contact folders are containers. Category filtering is exact and case-insensitive, supports any/all matching, and can be combined with folder selection. Folder tools manage top-level folders and one direct child level, keeping the interface predictable.
+
+The People API is intended for people-picker scenarios. `m365_contacts_people_list`
+defaults to mailbox-relevant people and can target the organization directory or
+both sources. Results include the primary email relevance score; optional profile
+details add company, department, job title, office, and phones. Filters distinguish
+organization users, personal contacts, and groups. The API does not expose private
+Outlook Contact Lists or their membership.
 
 ### 📁 OneDrive (5 tools)
 | Tool | Description |
