@@ -209,7 +209,7 @@ Each account needs its own App Registration in its respective tenant. Tokens are
 
 The first OneNote release targets corporate Microsoft 365 tenants. A personal Microsoft account can later be configured with tenant ID `consumers`, but that path still requires separate validation and is not part of the corporate release target.
 
-## Available Tools (50)
+## Available Tools (53)
 
 ### 📧 Mail (9 tools)
 | Tool | Description |
@@ -224,7 +224,7 @@ The first OneNote release targets corporate Microsoft 365 tenants. A personal Mi
 | `m365_mail_mark_read` | Mark as read/unread |
 | `m365_mail_folders` | List all mail folders with counts |
 
-### 📅 Calendar (7 tools)
+### 📅 Calendar (10 tools)
 | Tool | Description |
 |---|---|
 | `m365_calendar_list` | Events in a date range (paginated) |
@@ -232,7 +232,10 @@ The first OneNote release targets corporate Microsoft 365 tenants. A personal Mi
 | `m365_calendar_week` | Week view grouped by day |
 | `m365_calendar_create` | Create event (optional Teams meeting) |
 | `m365_calendar_update` | Update event |
-| `m365_calendar_delete` | Cancel event with message |
+| `m365_calendar_delete` | Deprecated alias: cancel an event you organize |
+| `m365_calendar_cancel` | Cancel an event you organize and notify attendees |
+| `m365_calendar_decline` | Decline an invitation as an attendee |
+| `m365_calendar_remove` | Remove an event from its containing calendar |
 | `m365_calendar_availability` | Free/busy lookup |
 
 ### 👤 Contacts (12 tools)

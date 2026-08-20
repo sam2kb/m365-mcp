@@ -1,5 +1,5 @@
 /**
- * Calendar tools — list, today, week, create, update, delete, availability
+ * Calendar tools — list, today, week, create, update, cancel, decline, remove, availability
  */
 
 import type { CalendarEvent } from "../types.js";
@@ -47,9 +47,9 @@ export function registerCalendarTools(client: GraphClient) {
       let path: string;
 
       if (args.startDateTime && args.endDateTime) {
-        path = `${user}/calendarView?startDateTime=${encodeURIComponent(args.startDateTime)}&endDateTime=${encodeURIComponent(args.endDateTime)}&$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,webLink`;
+        path = `${user}/calendarView?startDateTime=${encodeURIComponent(args.startDateTime)}&endDateTime=${encodeURIComponent(args.endDateTime)}&$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
       } else {
-        path = `${user}/events?$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,webLink`;
+        path = `${user}/events?$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
       }
 
       const events = await client.getAll<CalendarEvent>(path, 10, top);
@@ -65,6 +65,8 @@ export function registerCalendarTools(client: GraphClient) {
           meetingUrl: e.onlineMeetingUrl,
           organizer: e.organizer?.emailAddress?.name ?? e.organizer?.emailAddress?.address,
           attendees: e.attendees?.length ?? 0,
+          isOrganizer: e.isOrganizer,
+          responseStatus: e.responseStatus?.response,
           webLink: e.webLink,
         })),
         null,
@@ -185,7 +187,7 @@ export function registerCalendarTools(client: GraphClient) {
       return JSON.stringify({ success: true, eventId: args.eventId });
     },
 
-    // ── delete ───────────────────────────────────────────────────
+    // ── delete (deprecated organizer-cancel alias) ───────────────
     async calendar_delete(args: {
       eventId: string;
       comment?: string;
@@ -194,6 +196,39 @@ export function registerCalendarTools(client: GraphClient) {
       await client.post(`${user}/events/${eventId}/cancel`, {
         comment: args.comment || "",
       });
+      return JSON.stringify({ success: true, eventId: args.eventId });
+    },
+
+    // ── cancel (organizer only) ──────────────────────────────────
+    async calendar_cancel(args: {
+      eventId: string;
+      comment?: string;
+    }): Promise<string> {
+      const eventId = encodeURIComponent(args.eventId);
+      await client.post(`${user}/events/${eventId}/cancel`, {
+        comment: args.comment || "",
+      });
+      return JSON.stringify({ success: true, eventId: args.eventId });
+    },
+
+    // ── decline (attendee only) ──────────────────────────────────
+    async calendar_decline(args: {
+      eventId: string;
+      comment?: string;
+      sendResponse?: boolean;
+    }): Promise<string> {
+      const eventId = encodeURIComponent(args.eventId);
+      await client.post(`${user}/events/${eventId}/decline`, {
+        comment: args.comment || "",
+        sendResponse: args.sendResponse ?? true,
+      });
+      return JSON.stringify({ success: true, eventId: args.eventId });
+    },
+
+    // ── remove from containing calendar ──────────────────────────
+    async calendar_remove(args: { eventId: string }): Promise<string> {
+      const eventId = encodeURIComponent(args.eventId);
+      await client.delete(`${user}/events/${eventId}`);
       return JSON.stringify({ success: true, eventId: args.eventId });
     },
 
@@ -273,12 +308,48 @@ export const calendarToolSchemas = [
   },
   {
     name: "m365_calendar_delete",
-    description: "Cancel/delete a calendar event",
+    description: "Deprecated alias: cancel a calendar event you organize",
     inputSchema: {
       type: "object",
       properties: {
         eventId: { type: "string", description: "Event ID" },
         comment: { type: "string", description: "Cancellation message to attendees" },
+      },
+      required: ["eventId"],
+    },
+  },
+  {
+    name: "m365_calendar_cancel",
+    description: "Cancel a calendar event you organize and notify attendees",
+    inputSchema: {
+      type: "object",
+      properties: {
+        eventId: { type: "string", description: "Event ID" },
+        comment: { type: "string", description: "Cancellation message to attendees" },
+      },
+      required: ["eventId"],
+    },
+  },
+  {
+    name: "m365_calendar_decline",
+    description: "Decline a calendar invitation as an attendee",
+    inputSchema: {
+      type: "object",
+      properties: {
+        eventId: { type: "string", description: "Event ID" },
+        comment: { type: "string", description: "Optional response to the organizer" },
+        sendResponse: { type: "boolean", description: "Send the response to the organizer (default: true)" },
+      },
+      required: ["eventId"],
+    },
+  },
+  {
+    name: "m365_calendar_remove",
+    description: "Remove an event from the containing calendar without using organizer cancellation",
+    inputSchema: {
+      type: "object",
+      properties: {
+        eventId: { type: "string", description: "Event ID" },
       },
       required: ["eventId"],
     },
