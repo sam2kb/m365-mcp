@@ -53,7 +53,8 @@ the storage and revocation details.
 - `Notes.Read` / `Notes.ReadWrite` (your OneNote notebooks and pages)
 - `Tasks.ReadWrite` (To Do)
 - `Chat.Read` / `Chat.ReadWrite` (Teams)
-- `User.Read` + `offline_access`
+- `User.Read` / `User.Read.All` (own profile plus organization users and manager relationships)
+- `offline_access`
 
 These are delegated scopes, not tenant-wide application permissions. Set
 `M365_MCP_READ_ONLY=true` before authentication and when running the server to
@@ -84,6 +85,7 @@ Under **API Permissions** → **Add a permission** → **Microsoft Graph** → *
 ```
 offline_access
 User.Read
+User.Read.All
 Mail.Read
 Mail.ReadWrite
 Mail.Send
@@ -100,9 +102,8 @@ Chat.Read
 Chat.ReadWrite
 ```
 
-Click **Grant admin consent** (or each user will consent individually during login).
-
-> Organization-wide user listing and lookup additionally requires delegated `User.Read.All` with admin consent. This broader scope is not requested by default.
+Click **Grant admin consent**. Delegated `User.Read.All` requires administrator
+consent and enables organization user listing and manager lookup.
 
 ### 3. Install
 

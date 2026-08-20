@@ -28,6 +28,7 @@ export function resolveScopes(env: NodeJS.ProcessEnv = process.env): string {
   const scopes = [
     "offline_access",
     "User.Read",
+    "User.Read.All",
     "Mail.Read",
     "Calendars.Read",
     "Contacts.Read",

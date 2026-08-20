@@ -355,6 +355,7 @@ function clearFs() {
       expect(scopes).toContain("Tasks.Read");
       expect(scopes).toContain("People.Read");
       expect(scopes).toContain("Notes.Read");
+      expect(scopes).toContain("User.Read.All");
       expect(scopes).not.toContain("Mail.Send");
       expect(scopes).not.toContain("Mail.ReadWrite");
       expect(scopes).not.toContain("Tasks.ReadWrite");
@@ -367,6 +368,7 @@ function clearFs() {
       expect(scopes).toContain("Calendars.ReadWrite");
       expect(scopes).toContain("Chat.ReadWrite");
       expect(scopes).toContain("Notes.ReadWrite");
+      expect(scopes).toContain("User.Read.All");
     });
   });
 

@@ -11,8 +11,12 @@ export function registerUsersTools(client: GraphClient) {
       const top = args.top || 50;
       let path = `/users?$top=${top}&$select=id,displayName,mail,userPrincipalName,jobTitle,department,officeLocation`;
       if (args.filter) path += `&$filter=${encodeURIComponent(args.filter)}`;
-      if (args.search) path += `&$search="${encodeURIComponent(args.search)}"`;
-      const users = await client.getAll<OrgUser>(path, 10, top);
+      const headers: Record<string, string> = {};
+      if (args.search) {
+        path += `&$search="${encodeURIComponent(args.search)}"&$count=true`;
+        headers.ConsistencyLevel = "eventual";
+      }
+      const users = await client.getAll<OrgUser>(path, 10, top, headers);
       return JSON.stringify(users, null, 2);
     },
 
@@ -39,7 +43,7 @@ export function registerUsersTools(client: GraphClient) {
 export const usersToolSchemas = [
   {
     name: "m365_users_list",
-    description: "List users in your organization (requires User.Read.All — may need admin consent)",
+    description: "List users in your organization (requires delegated User.Read.All with admin consent)",
     inputSchema: {
       type: "object",
       properties: {

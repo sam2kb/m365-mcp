@@ -1,6 +1,6 @@
 ---
 name: m365-mcp
-description: Production-grade Microsoft 365 MCP server with delegated OAuth, multi-account support, pagination, rate limiting, and 44 tools covering email, calendar, contacts, OneDrive, Teams, tasks, and users.
+description: Production-grade Microsoft 365 MCP server with delegated OAuth, multi-account support, pagination, rate limiting, and 53 tools covering email, calendar, contacts, OneDrive, OneNote, Teams, tasks, and users.
 metadata:
   openclaw:
     homepage: https://github.com/sam2kb/m365-mcp#readme
@@ -58,6 +58,10 @@ Production-grade Microsoft 365 MCP server combining the best of office365-connec
 
 - List files, search, read content, metadata, create folders
 
+### OneNote (6 tools)
+
+- List notebooks and sections, list/search/read pages, and create pages
+
 ### Teams (3 tools)
 
 - List chats, read messages, send messages
@@ -68,7 +72,7 @@ Production-grade Microsoft 365 MCP server combining the best of office365-connec
 
 ### Users (3 tools)
 
-- List org users, profile lookup, manager lookup
+- List org users, profile lookup, manager lookup (`User.Read.All`, admin consent required)
 
 ## Security and consent
 
