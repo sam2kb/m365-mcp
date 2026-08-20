@@ -36,11 +36,16 @@ describe("teams tools", () => {
   describe("teams_chats", () => {
     it("lists chats with member names", async () => {
       (client.getAll as any).mockResolvedValue([
-        { id: "chat1", topic: "Project X", chatType: "group", members: [{ displayName: "Alice" }, { displayName: "Bob" }], lastUpdatedDateTime: "2026-07-18T10:00:00Z" },
         { id: "chat2", topic: null, chatType: "oneOnOne", members: [{ displayName: "Charlie" }], lastUpdatedDateTime: "2026-07-17T10:00:00Z" },
+        { id: "chat1", topic: "Project X", chatType: "group", members: [{ displayName: "Alice" }, { displayName: "Bob" }], lastUpdatedDateTime: "2026-07-18T10:00:00Z" },
       ]);
       const result = await tools.teams_chats({ top: 10 });
       const parsed = JSON.parse(result);
+      expect(client.getAll).toHaveBeenCalledWith(
+        "/me/chats?$top=10&$expand=members",
+        10,
+        10
+      );
       expect(parsed[0]).toMatchObject({ id: "chat1", topic: "Project X", type: "group" });
       expect(parsed[1]).toMatchObject({ id: "chat2", topic: "(no topic)", type: "oneOnOne" });
     });
@@ -92,6 +97,7 @@ describe("tasks tools", () => {
       ]);
       const result = await tools.tasks_lists();
       const parsed = JSON.parse(result);
+      expect(client.getAll).toHaveBeenCalledWith("/me/todo/lists");
       expect(parsed[0]).toMatchObject({ id: "list1", name: "Tasks", wellknown: "defaultList" });
     });
   });

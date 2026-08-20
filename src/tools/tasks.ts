@@ -10,9 +10,7 @@ export function registerTasksTools(client: GraphClient) {
 
   return {
     async tasks_lists(): Promise<string> {
-      const lists = await client.getAll<TodoList>(
-        `${user}/todo/lists?$select=id,displayName,isOwner,wellknownListName`
-      );
+      const lists = await client.getAll<TodoList>(`${user}/todo/lists`);
       return JSON.stringify(
         lists.map((l) => ({
           id: l.id,
