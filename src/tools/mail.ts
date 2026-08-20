@@ -5,6 +5,16 @@
 import type { EmailMessage } from "../types.js";
 import type { GraphClient } from "../graph.js";
 
+function newestFirst(messages: EmailMessage[]): EmailMessage[] {
+  const timestamp = (value?: string) => {
+    const parsed = value ? Date.parse(value) : 0;
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+  return [...messages].sort(
+    (a, b) => timestamp(b.receivedDateTime) - timestamp(a.receivedDateTime)
+  );
+}
+
 export function registerMailTools(client: GraphClient) {
   const user = "/me";
 
@@ -18,14 +28,17 @@ export function registerMailTools(client: GraphClient) {
     }): Promise<string> {
       const folder = args.folder || "inbox";
       const top = args.top || 20;
-      let path = `${user}/mailFolders/${encodeURIComponent(folder)}/messages?$top=${top}&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,importance,webLink`;
+      const search = args.search?.trim();
+      let path = `${user}/mailFolders/${encodeURIComponent(folder)}/messages?$top=${top}&$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,importance,webLink`;
 
+      if (!search) path += `&$orderby=receivedDateTime desc`;
       if (args.filter) path += `&$filter=${encodeURIComponent(args.filter)}`;
-      if (args.search) path += `&$search="${encodeURIComponent(args.search)}"`;
+      if (search) path += `&$search="${encodeURIComponent(search)}"`;
 
       const msgs = await client.getAll<EmailMessage>(path, 10, top);
+      const ordered = search ? newestFirst(msgs) : msgs;
       return JSON.stringify(
-        msgs.map((m) => ({
+        ordered.map((m) => ({
           id: m.id,
           subject: m.subject,
           from: m.from?.emailAddress?.address,
@@ -118,8 +131,8 @@ export function registerMailTools(client: GraphClient) {
     // ── search ───────────────────────────────────────────────────
     async mail_search(args: { query: string; top?: number }): Promise<string> {
       const top = args.top || 20;
-      const path = `${user}/messages?$search="${encodeURIComponent(args.query)}"&$top=${top}&$orderby=receivedDateTime desc`;
-      const msgs = await client.getAll<EmailMessage>(path, 10, top);
+      const path = `${user}/messages?$search="${encodeURIComponent(args.query.trim())}"&$top=${top}`;
+      const msgs = newestFirst(await client.getAll<EmailMessage>(path, 10, top));
       return JSON.stringify(
         msgs.map((m) => ({
           id: m.id,
