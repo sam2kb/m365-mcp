@@ -59,7 +59,7 @@ function clearFs() {
 
 // ─── tests ──────────────────────────────────────────────────────────
 
-describe("auth", () => {
+  describe("auth", () => {
   beforeEach(() => {
     clearFs();
   });
@@ -354,9 +354,11 @@ describe("auth", () => {
       expect(scopes).toContain("Mail.Read");
       expect(scopes).toContain("Tasks.Read");
       expect(scopes).toContain("People.Read");
+      expect(scopes).toContain("Notes.Read");
       expect(scopes).not.toContain("Mail.Send");
       expect(scopes).not.toContain("Mail.ReadWrite");
       expect(scopes).not.toContain("Tasks.ReadWrite");
+      expect(scopes).not.toContain("Notes.ReadWrite");
     });
 
     it("preserves write scopes by default", () => {
@@ -364,6 +366,7 @@ describe("auth", () => {
       expect(scopes).toContain("Mail.Send");
       expect(scopes).toContain("Calendars.ReadWrite");
       expect(scopes).toContain("Chat.ReadWrite");
+      expect(scopes).toContain("Notes.ReadWrite");
     });
   });
 

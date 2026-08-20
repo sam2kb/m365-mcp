@@ -41,6 +41,11 @@ const READ_ONLY_TOOLS = new Set([
   "m365_users_list",
   "m365_users_profile",
   "m365_users_manager",
+  "m365_onenote_notebooks_list",
+  "m365_onenote_sections_list",
+  "m365_onenote_pages_list",
+  "m365_onenote_page_read",
+  "m365_onenote_pages_search",
 ]);
 
 const KNOWN_MUTATING_TOOLS = new Set([
@@ -63,6 +68,7 @@ const KNOWN_MUTATING_TOOLS = new Set([
   "m365_tasks_create",
   "m365_tasks_update",
   "m365_tasks_delete",
+  "m365_onenote_page_create",
 ]);
 
 const DESTRUCTIVE_TOOLS = new Set([

@@ -27,6 +27,15 @@ describe("security controls", () => {
       destructiveHint: false,
       openWorldHint: true,
     });
+    expect(toolSafetyAnnotations("m365_onenote_page_read")).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+    expect(toolSafetyAnnotations("m365_onenote_page_create")).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    });
     expect(toolSafetyAnnotations("m365_teams_send")).toMatchObject({
       readOnlyHint: false,
       destructiveHint: false,
@@ -48,10 +57,13 @@ describe("security controls", () => {
       { name: "m365_mail_list" },
       { name: "m365_mail_send" },
       { name: "m365_mail_delete" },
+      { name: "m365_onenote_page_read" },
+      { name: "m365_onenote_page_create" },
     ]);
 
     expect(toolsForMode(tools, true).map((tool) => tool.name)).toEqual([
       "m365_mail_list",
+      "m365_onenote_page_read",
     ]);
     expect(() => assertToolAllowed("m365_mail_send", true)).toThrow(
       "M365_MCP_READ_ONLY",
@@ -63,6 +75,9 @@ describe("security controls", () => {
       "M365_MCP_READ_ONLY",
     );
     expect(() => assertToolAllowed("m365_mail_list", true)).not.toThrow();
+    expect(() => assertToolAllowed("m365_onenote_page_create", true)).toThrow(
+      "M365_MCP_READ_ONLY",
+    );
   });
 
   it("preserves all tools when read-only mode is disabled", () => {

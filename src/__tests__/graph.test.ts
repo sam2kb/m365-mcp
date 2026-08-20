@@ -273,6 +273,21 @@ describe("GraphClient", () => {
       expect(result).toEqual({ id: "new" });
     });
 
+    it("postContent sends the requested content type and raw body", async () => {
+      mockFetch([{ status: 200, body: { id: "page" } }]);
+      await client.postContent("/test", "<html></html>", "application/xhtml+xml");
+      const options = vi.mocked(fetch).mock.calls[0][1]!;
+      expect(new Headers(options.headers).get("Content-Type")).toBe("application/xhtml+xml");
+      expect(options.body).toBe("<html></html>");
+    });
+
+    it("getText truncates raw responses by byte count", async () => {
+      mockFetch([{ status: 200, body: "abcdef" }]);
+      await expect(client.getText("/test", 3)).resolves.toEqual({ content: "abc", truncated: true });
+      const options = vi.mocked(fetch).mock.calls[0][1]!;
+      expect(new Headers(options.headers).get("Accept")).toBe("text/html");
+    });
+
     it("patch sends PATCH", async () => {
       mockFetch([{ status: 200, body: { updated: true } }]);
       const result = await client.patch("/test", { name: "y" });

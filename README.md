@@ -3,7 +3,7 @@
 [![npm](https://img.shields.io/npm/v/%40sam2kb%2Fm365-mcp?logo=npm&label=npm)](https://www.npmjs.com/package/@sam2kb/m365-mcp)
 [![ClawHub](https://img.shields.io/badge/ClawHub-m365--mcp-f97316)](https://clawhub.ai/sam2kb/skills/m365-mcp)
 
-**Production-grade Microsoft 365 MCP server** — Email, Calendar, Contacts, OneDrive, Teams, Tasks, and Users via delegated OAuth.
+**Production-grade Microsoft 365 MCP server** — Email, Calendar, Contacts, OneDrive, OneNote, Teams, Tasks, and Users via delegated OAuth.
 
 Built from the best of both `office365-connector` (delegated OAuth, multi-account) and `mcp-microsoft365` (MCP protocol, full scope), with all the gaps fixed: pagination, rate limiting, retry logic, proper timezone handling, and TypeScript throughout.
 
@@ -29,11 +29,12 @@ as reviewed on July 18, 2026.
 | Calendar | ✅ | ✅ | ✅ |
 | Contacts | ❌ | ❌ (documented, not shipped) | ✅ |
 | OneDrive | ✅ | ❌ | ✅ |
+| OneNote | ❌ | ❌ | ✅ |
 | Teams | ✅ | ❌ | ✅ |
 | Tasks | ✅ | ❌ | ✅ |
 | Users | ✅ | ❌ | ✅ |
 | Implementation | TypeScript | JavaScript CLI | TypeScript |
-| Interface coverage | 19 MCP tools | CLI scripts | **44 MCP tools** |
+| Interface coverage | 19 MCP tools | CLI scripts | **50 MCP tools** |
 
 `m365-mcp` does not store a client secret or password. Tenant and client IDs are
 non-secret identifiers; sensitive OAuth access and refresh tokens are stored
@@ -49,6 +50,7 @@ the storage and revocation details.
 - `Contacts.Read` / `Contacts.ReadWrite`
 - `People.Read` (relevance-ranked people search)
 - `Files.Read.All` (your OneDrive)
+- `Notes.Read` / `Notes.ReadWrite` (your OneNote notebooks and pages)
 - `Tasks.ReadWrite` (To Do)
 - `Chat.Read` / `Chat.ReadWrite` (Teams)
 - `User.Read` + `offline_access`
@@ -91,6 +93,8 @@ Contacts.Read
 Contacts.ReadWrite
 People.Read
 Files.Read.All
+Notes.Read
+Notes.ReadWrite
 Tasks.ReadWrite
 Chat.Read
 Chat.ReadWrite
@@ -201,9 +205,11 @@ node dist/auth-cli.js default work
 node dist/auth-cli.js list
 ```
 
-Each account needs its own App Registration in its respective tenant. Tokens are isolated per account.
+Each account needs its own App Registration in its respective tenant. Tokens are isolated per account, and `M365_ACCOUNT` selects exactly one account for every Graph operation in a server process; tools never combine data across accounts.
 
-## Available Tools (43)
+The first OneNote release targets corporate Microsoft 365 tenants. A personal Microsoft account can later be configured with tenant ID `consumers`, but that path still requires separate validation and is not part of the corporate release target.
+
+## Available Tools (50)
 
 ### 📧 Mail (9 tools)
 | Tool | Description |
@@ -263,6 +269,18 @@ Outlook Contact Lists or their membership.
 | `m365_files_info` | File/folder metadata |
 | `m365_files_create_folder` | Create folder |
 
+### 📓 OneNote (6 tools)
+| Tool | Description |
+|---|---|
+| `m365_onenote_notebooks_list` | List notebooks (paginated) |
+| `m365_onenote_sections_list` | List all sections or sections in a notebook (paginated) |
+| `m365_onenote_pages_list` | List pages in a section (paginated) |
+| `m365_onenote_page_read` | Read page metadata and bounded HTML content |
+| `m365_onenote_pages_search` | Search pages by title or content (paginated) |
+| `m365_onenote_page_create` | Create an XHTML page in a section |
+
+This release intentionally defers in-place page updates, attachments, images, handwriting, and cross-account operations.
+
 ### 💬 Teams (3 tools)
 | Tool | Description |
 |---|---|
@@ -299,8 +317,8 @@ npm run build  # compile TypeScript
 - **Delegated OAuth** — the app acts as the authenticated user; it does not use
   application credentials or tenant-wide mail permissions.
 - **Device code flow** — you never type your password into anything but Microsoft's login page.
-- **Sensitive reads** — mail, files, calendar entries, contacts, Teams messages,
-  tasks, and user profiles can enter the MCP client's model context.
+- **Sensitive reads** — mail, files, OneNote page HTML, calendar entries, contacts,
+  Teams messages, tasks, and user profiles can enter the MCP client's model context.
 - **Real side effects** — send, reply, move, create, update, and delete tools
   change Microsoft 365 data. Configure your MCP client to require explicit user
   approval before it invokes them.

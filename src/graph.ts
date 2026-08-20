@@ -52,15 +52,15 @@ export class GraphClient {
       const opts: RequestInit = {
         method,
         headers: {
-          ...additionalHeaders,
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           Accept: "application/json",
           Prefer: `outlook.timezone="${this.timezone}"`,
+          ...additionalHeaders,
+          Authorization: `Bearer ${token}`,
         },
       };
-      if (body && method !== "GET") {
-        opts.body = JSON.stringify(body);
+      if (body !== undefined && method !== "GET") {
+        opts.body = typeof body === "string" ? body : JSON.stringify(body);
       }
 
       let resp: Response;
@@ -191,6 +191,26 @@ export class GraphClient {
   /** POST */
   async post<T>(path: string, body: unknown): Promise<T> {
     return this.request<T>(path, "POST", body);
+  }
+
+  /** POST a non-JSON payload (for example a OneNote XHTML page). */
+  async postContent<T>(path: string, body: string, contentType: string): Promise<T> {
+    return this.request<T>(path, "POST", body, false, { "Content-Type": contentType });
+  }
+
+  /** Read a Graph response as text, bounded by UTF-8 byte size. */
+  async getText(
+    path: string,
+    maxBytes = 100_000,
+    accept = "text/html",
+  ): Promise<{ content: string; truncated: boolean }> {
+    const response = await this.request<Response>(path, "GET", undefined, true, { Accept: accept });
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const truncated = bytes.byteLength > maxBytes;
+    return {
+      content: new TextDecoder().decode(truncated ? bytes.slice(0, maxBytes) : bytes),
+      truncated,
+    };
   }
 
   /** PATCH */

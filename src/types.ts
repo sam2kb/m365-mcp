@@ -158,3 +158,36 @@ export interface OrgUser {
   mobilePhone?: string;
   businessPhones?: string[];
 }
+
+export interface OneNoteNotebook {
+  id: string;
+  displayName: string;
+  createdDateTime?: string;
+  lastModifiedDateTime?: string;
+  isDefault?: boolean;
+  isShared?: boolean;
+  links?: { oneNoteWebUrl?: { href: string } };
+}
+
+export interface OneNoteSection {
+  id: string;
+  displayName: string;
+  createdDateTime?: string;
+  lastModifiedDateTime?: string;
+  isDefault?: boolean;
+  pagesUrl?: string;
+  parentNotebook?: { id: string; displayName?: string };
+  links?: { oneNoteWebUrl?: { href: string } };
+}
+
+export interface OneNotePage {
+  id: string;
+  title: string;
+  createdDateTime?: string;
+  lastModifiedDateTime?: string;
+  level?: number;
+  order?: number;
+  contentUrl?: string;
+  parentSection?: { id: string; displayName?: string };
+  links?: { oneNoteWebUrl?: { href: string } };
+}

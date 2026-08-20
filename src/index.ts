@@ -4,7 +4,7 @@
  *
  * Delegated OAuth device-code flow | Multi-account | Pagination | Rate-limit handling
  *
- * Covers: Email, Calendar, Contacts, OneDrive, Teams, Tasks, Users
+ * Covers: Email, Calendar, Contacts, OneDrive, OneNote, Teams, Tasks, Users
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -22,6 +22,7 @@ import { registerFilesTools, filesToolSchemas } from "./tools/files.js";
 import { registerTeamsTools, teamsToolSchemas } from "./tools/teams.js";
 import { registerTasksTools, tasksToolSchemas } from "./tools/tasks.js";
 import { registerUsersTools, usersToolSchemas } from "./tools/users.js";
+import { registerOneNoteTools, onenoteToolSchemas } from "./tools/onenote.js";
 import {
   annotateTools,
   assertToolAllowed,
@@ -46,6 +47,7 @@ const filesTools = registerFilesTools(client);
 const teamsTools = registerTeamsTools(client);
 const tasksTools = registerTasksTools(client);
 const usersTools = registerUsersTools(client);
+const onenoteTools = registerOneNoteTools(client);
 
 // ─── Tool catalog ────────────────────────────────────────────────────
 
@@ -57,6 +59,7 @@ const allTools = toolsForMode(annotateTools([
   ...teamsToolSchemas,
   ...tasksToolSchemas,
   ...usersToolSchemas,
+  ...onenoteToolSchemas,
 ]), READ_ONLY);
 
 // ─── Tool router ─────────────────────────────────────────────────────
@@ -121,6 +124,14 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
   if (name === "m365_users_list") return usersTools.users_list(args as any);
   if (name === "m365_users_profile") return usersTools.users_profile(args as any);
   if (name === "m365_users_manager") return usersTools.users_manager(args as any);
+
+  // OneNote
+  if (name === "m365_onenote_notebooks_list") return onenoteTools.onenote_notebooks_list(args as any);
+  if (name === "m365_onenote_sections_list") return onenoteTools.onenote_sections_list(args as any);
+  if (name === "m365_onenote_pages_list") return onenoteTools.onenote_pages_list(args as any);
+  if (name === "m365_onenote_page_read") return onenoteTools.onenote_page_read(args as any);
+  if (name === "m365_onenote_pages_search") return onenoteTools.onenote_pages_search(args as any);
+  if (name === "m365_onenote_page_create") return onenoteTools.onenote_page_create(args as any);
 
   throw new Error(`Unknown tool: ${name}`);
 }

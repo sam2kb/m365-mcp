@@ -1,7 +1,7 @@
 {
   "name": "@sam2kb/m365-mcp",
   "version": "1.0.7",
-  "description": "Production-grade Microsoft 365 MCP server — email, calendar, contacts, OneDrive, Teams, tasks, and users via delegated OAuth",
+  "description": "Production-grade Microsoft 365 MCP server — email, calendar, contacts, OneDrive, OneNote, Teams, tasks, and users via delegated OAuth",
   "type": "module",
   "main": "dist/index.js",
   "files": [
@@ -31,6 +31,7 @@
     "outlook",
     "teams",
     "onedrive",
+    "onenote",
     "graph-api"
   ],
   "author": "Alex Kay <info@wittyfinch.com>",
