@@ -45,9 +45,10 @@ Production-grade Microsoft 365 MCP server combining the best of office365-connec
 
 - List, read, send, reply, search, move, delete, mark read/unread, list folders
 
-### Calendar (7 tools)
+### Calendar (10 tools)
 
-- List events, today view, week view, create (with Teams meeting), update, delete, free/busy
+- List events, today view, week view, create (with Teams meeting), update,
+  organizer cancellation, attendee decline, local removal, free/busy
 
 ### Contacts (12 tools)
 

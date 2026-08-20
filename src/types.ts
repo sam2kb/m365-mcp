@@ -79,6 +79,8 @@ export interface CalendarEvent {
   onlineMeetingUrl?: string;
   organizer?: { emailAddress: EmailAddress };
   attendees?: { emailAddress: EmailAddress; type: string; status: { response: string } }[];
+  isOrganizer?: boolean;
+  responseStatus?: { response: string; time?: string };
   body?: { contentType: string; content: string };
   isAllDay: boolean;
   recurrence?: any;

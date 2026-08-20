@@ -36,6 +36,21 @@ describe("security controls", () => {
       readOnlyHint: false,
       destructiveHint: true,
     });
+    expect(toolSafetyAnnotations("m365_calendar_cancel")).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    });
+    expect(toolSafetyAnnotations("m365_calendar_decline")).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    });
+    expect(toolSafetyAnnotations("m365_calendar_remove")).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    });
     expect(toolSafetyAnnotations("m365_future_tool")).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,
