@@ -54,12 +54,25 @@ describe("mail tools", () => {
       );
     });
 
-    it("includes filter and search params", async () => {
+    it("uses server-side ordering when search is absent", async () => {
       (client.getAll as any).mockResolvedValue([]);
-      await tools.mail_list({ filter: "isRead eq false", search: "report" });
+      await tools.mail_list({ filter: "isRead eq false" });
       const path = (client.getAll as any).mock.calls[0][0] as string;
       expect(path).toContain("$filter=isRead%20eq%20false");
-      expect(path).toContain('$search="report"');
+      expect(path).toContain("$orderby=receivedDateTime desc");
+    });
+
+    it("omits unsupported orderby and sorts folder search results locally", async () => {
+      (client.getAll as any).mockResolvedValue([
+        { id: "older", receivedDateTime: "2026-08-19T10:00:00Z" },
+        { id: "newer", receivedDateTime: "2026-08-20T10:00:00Z" },
+      ]);
+      const result = await tools.mail_list({ folder: "sentitems", search: "subject:Test" });
+      const path = (client.getAll as any).mock.calls[0][0] as string;
+      expect(path).toContain("/mailFolders/sentitems/messages");
+      expect(path).toContain('$search="subject%3ATest"');
+      expect(path).not.toContain("$orderby");
+      expect(JSON.parse(result).map((message: { id: string }) => message.id)).toEqual(["newer", "older"]);
     });
 
     it("formats messages with key fields", async () => {
@@ -133,6 +146,20 @@ describe("mail tools", () => {
           body: { contentType: "HTML", content: "<b>hi</b>" },
         }),
       });
+    });
+  });
+
+  describe("mail_search", () => {
+    it("omits unsupported orderby and sorts results locally", async () => {
+      (client.getAll as any).mockResolvedValue([
+        { id: "older", receivedDateTime: "2026-08-19T10:00:00Z" },
+        { id: "newer", receivedDateTime: "2026-08-20T10:00:00Z" },
+      ]);
+      const result = await tools.mail_search({ query: "subject:Test" });
+      const path = (client.getAll as any).mock.calls[0][0] as string;
+      expect(path).toContain('$search="subject%3ATest"');
+      expect(path).not.toContain("$orderby");
+      expect(JSON.parse(result).map((message: { id: string }) => message.id)).toEqual(["newer", "older"]);
     });
   });
 
