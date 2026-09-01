@@ -82,6 +82,8 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
   if (name === "m365_calendar_create") return calendarTools.calendar_create(args as any);
   if (name === "m365_calendar_update") return calendarTools.calendar_update(args as any);
   if (name === "m365_calendar_delete") return calendarTools.calendar_delete(args as any);
+  if (name === "m365_calendar_cancel") return calendarTools.calendar_cancel(args as any);
+  if (name === "m365_calendar_decline") return calendarTools.calendar_decline(args as any);
   if (name === "m365_calendar_availability") return calendarTools.calendar_availability(args as any);
 
   // Contacts

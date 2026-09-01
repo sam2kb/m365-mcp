@@ -36,6 +36,16 @@ describe("security controls", () => {
       readOnlyHint: false,
       destructiveHint: true,
     });
+    expect(toolSafetyAnnotations("m365_calendar_cancel")).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    });
+    expect(toolSafetyAnnotations("m365_calendar_decline")).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+    });
     expect(toolSafetyAnnotations("m365_future_tool")).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,
@@ -48,6 +58,8 @@ describe("security controls", () => {
       { name: "m365_mail_list" },
       { name: "m365_mail_send" },
       { name: "m365_mail_delete" },
+      { name: "m365_calendar_cancel" },
+      { name: "m365_calendar_decline" },
     ]);
 
     expect(toolsForMode(tools, true).map((tool) => tool.name)).toEqual([
@@ -57,6 +69,12 @@ describe("security controls", () => {
       "M365_MCP_READ_ONLY",
     );
     expect(() => assertToolAllowed("m365_mail_delete", true)).toThrow(
+      "M365_MCP_READ_ONLY",
+    );
+    expect(() => assertToolAllowed("m365_calendar_cancel", true)).toThrow(
+      "M365_MCP_READ_ONLY",
+    );
+    expect(() => assertToolAllowed("m365_calendar_decline", true)).toThrow(
       "M365_MCP_READ_ONLY",
     );
     expect(() => assertToolAllowed("m365_future_tool", true)).toThrow(

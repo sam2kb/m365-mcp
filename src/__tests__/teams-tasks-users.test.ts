@@ -171,7 +171,20 @@ describe("users tools", () => {
       await tools.users_list({ search: "Alice", filter: "department eq 'Engineering'" });
       const path = (client.getAll as any).mock.calls[0][0] as string;
       expect(path).toContain('$search="Alice"');
+      expect(path).toContain("$count=true");
       expect(path).toContain("$filter=department%20eq%20'Engineering'");
+      expect(client.getAll).toHaveBeenCalledWith(
+        expect.any(String),
+        10,
+        50,
+        { ConsistencyLevel: "eventual" }
+      );
+    });
+
+    it("does not request advanced-query headers without search", async () => {
+      (client.getAll as any).mockResolvedValue([]);
+      await tools.users_list({ top: 5 });
+      expect(client.getAll).toHaveBeenCalledWith(expect.any(String), 10, 5, {});
     });
   });
 

@@ -33,7 +33,7 @@ as reviewed on July 18, 2026.
 | Tasks | ✅ | ❌ | ✅ |
 | Users | ✅ | ❌ | ✅ |
 | Implementation | TypeScript | JavaScript CLI | TypeScript |
-| Interface coverage | 19 MCP tools | CLI scripts | **44 MCP tools** |
+| Interface coverage | 19 MCP tools | CLI scripts | **46 MCP tools** |
 
 `m365-mcp` does not store a client secret or password. Tenant and client IDs are
 non-secret identifiers; sensitive OAuth access and refresh tokens are stored
@@ -203,7 +203,7 @@ node dist/auth-cli.js list
 
 Each account needs its own App Registration in its respective tenant. Tokens are isolated per account.
 
-## Available Tools (43)
+## Available Tools (46)
 
 ### 📧 Mail (9 tools)
 | Tool | Description |
@@ -218,7 +218,7 @@ Each account needs its own App Registration in its respective tenant. Tokens are
 | `m365_mail_mark_read` | Mark as read/unread |
 | `m365_mail_folders` | List all mail folders with counts |
 
-### 📅 Calendar (7 tools)
+### 📅 Calendar (9 tools)
 | Tool | Description |
 |---|---|
 | `m365_calendar_list` | Events in a date range (paginated) |
@@ -226,8 +226,14 @@ Each account needs its own App Registration in its respective tenant. Tokens are
 | `m365_calendar_week` | Week view grouped by day |
 | `m365_calendar_create` | Create event (optional Teams meeting) |
 | `m365_calendar_update` | Update event |
-| `m365_calendar_delete` | Cancel event with message |
+| `m365_calendar_delete` | Legacy alias for organizer cancellation |
+| `m365_calendar_cancel` | Cancel an event you organize and notify attendees |
+| `m365_calendar_decline` | Decline an invitation as an attendee |
 | `m365_calendar_availability` | Free/busy lookup |
+
+Calendar listings include `isOrganizer` and `responseStatus` so clients can
+choose the correct action. Cancellation is organizer-only and notifies attendees;
+decline is attendee-only. There is no ambiguous silent-remove tool.
 
 ### 👤 Contacts (12 tools)
 | Tool | Description |
@@ -301,7 +307,7 @@ npm run build  # compile TypeScript
 - **Device code flow** — you never type your password into anything but Microsoft's login page.
 - **Sensitive reads** — mail, files, calendar entries, contacts, Teams messages,
   tasks, and user profiles can enter the MCP client's model context.
-- **Real side effects** — send, reply, move, create, update, and delete tools
+- **Real side effects** — send, reply, move, create, update, cancel, decline, and delete tools
   change Microsoft 365 data. Configure your MCP client to require explicit user
   approval before it invokes them.
 - **MCP safety annotations** — every tool declares read-only, destructive,

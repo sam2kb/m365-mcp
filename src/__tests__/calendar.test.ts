@@ -60,6 +60,8 @@ describe("calendar tools", () => {
           onlineMeetingUrl: "https://teams.microsoft.com/...",
           organizer: { emailAddress: { name: "Alice", address: "alice@b.com" } },
           attendees: [{}, {}],
+          isOrganizer: false,
+          responseStatus: { response: "tentativelyAccepted", time: "2026-07-01T12:00:00Z" },
           webLink: "https://outlook.office.com/...",
         },
       ]);
@@ -73,7 +75,11 @@ describe("calendar tools", () => {
         isOnline: true,
         organizer: "Alice",
         attendees: 2,
+        isOrganizer: false,
+        responseStatus: "tentativelyAccepted",
       });
+      const path = (client.getAll as any).mock.calls[0][0] as string;
+      expect(path).toContain("isOrganizer,responseStatus");
     });
   });
 
@@ -118,9 +124,34 @@ describe("calendar tools", () => {
   });
 
   describe("calendar_delete", () => {
-    it("cancels event with comment", async () => {
+    it("keeps the legacy organizer-cancel behavior", async () => {
       await tools.calendar_delete({ eventId: "ev1", comment: "No longer needed" });
       expect(client.post).toHaveBeenCalledWith("/me/events/ev1/cancel", { comment: "No longer needed" });
+    });
+  });
+
+  describe("calendar_cancel", () => {
+    it("cancels an organizer-owned event with a comment", async () => {
+      await tools.calendar_cancel({ eventId: "organizer/event", comment: "Cancelled" });
+      expect(client.post).toHaveBeenCalledWith("/me/events/organizer%2Fevent/cancel", { comment: "Cancelled" });
+    });
+  });
+
+  describe("calendar_decline", () => {
+    it("declines an attendee invitation and sends a response by default", async () => {
+      await tools.calendar_decline({ eventId: "invite1", comment: "Unable to attend" });
+      expect(client.post).toHaveBeenCalledWith("/me/events/invite1/decline", {
+        comment: "Unable to attend",
+        sendResponse: true,
+      });
+    });
+
+    it("can decline without sending a response", async () => {
+      await tools.calendar_decline({ eventId: "invite1", sendResponse: false });
+      expect(client.post).toHaveBeenCalledWith("/me/events/invite1/decline", {
+        comment: "",
+        sendResponse: false,
+      });
     });
   });
 
@@ -139,8 +170,9 @@ describe("calendar tools", () => {
   });
 
   describe("tool schemas", () => {
-    it("has 7 calendar tool schemas", () => {
-      expect(calendarToolSchemas).toHaveLength(7);
+    it("has 9 calendar tool schemas without an ambiguous remove action", () => {
+      expect(calendarToolSchemas).toHaveLength(9);
+      expect(calendarToolSchemas.some((schema) => schema.name === "m365_calendar_remove")).toBe(false);
     });
   });
 });

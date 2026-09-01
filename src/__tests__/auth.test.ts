@@ -354,6 +354,7 @@ describe("auth", () => {
       expect(scopes).toContain("Mail.Read");
       expect(scopes).toContain("Tasks.Read");
       expect(scopes).toContain("People.Read");
+      expect(scopes).not.toContain("User.Read.All");
       expect(scopes).not.toContain("Mail.Send");
       expect(scopes).not.toContain("Mail.ReadWrite");
       expect(scopes).not.toContain("Tasks.ReadWrite");
@@ -364,6 +365,7 @@ describe("auth", () => {
       expect(scopes).toContain("Mail.Send");
       expect(scopes).toContain("Calendars.ReadWrite");
       expect(scopes).toContain("Chat.ReadWrite");
+      expect(scopes).not.toContain("User.Read.All");
     });
   });
 
