@@ -11,8 +11,13 @@ export function registerTeamsTools(client: GraphClient) {
   return {
     async teams_chats(args: { top?: number }): Promise<string> {
       const top = args.top || 20;
-      const path = `${user}/chats?$top=${top}&$expand=members&$orderby=lastUpdatedDateTime desc`;
+      const path = `${user}/chats?$top=${top}&$expand=members`;
       const chats = await client.getAll<TeamsChat>(path, 10, top);
+      chats.sort(
+        (a, b) =>
+          Date.parse(b.lastUpdatedDateTime ?? "") -
+          Date.parse(a.lastUpdatedDateTime ?? "")
+      );
       return JSON.stringify(
         chats.map((c) => ({
           id: c.id,
