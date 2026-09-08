@@ -21,6 +21,7 @@ const READ_ONLY_TOOLS = new Set([
   "m365_mail_search",
   "m365_mail_folders",
   "m365_calendar_list",
+  "m365_calendar_get",
   "m365_calendar_today",
   "m365_calendar_week",
   "m365_calendar_availability",
