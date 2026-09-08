@@ -77,6 +77,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
 
   // Calendar
   if (name === "m365_calendar_list") return calendarTools.calendar_list(args as any);
+  if (name === "m365_calendar_get") return calendarTools.calendar_get(args as any);
   if (name === "m365_calendar_today") return calendarTools.calendar_today();
   if (name === "m365_calendar_week") return calendarTools.calendar_week();
   if (name === "m365_calendar_create") return calendarTools.calendar_create(args as any);

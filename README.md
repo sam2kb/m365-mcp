@@ -33,7 +33,7 @@ as reviewed on July 18, 2026.
 | Tasks | ✅ | ❌ | ✅ |
 | Users | ✅ | ❌ | ✅ |
 | Implementation | TypeScript | JavaScript CLI | TypeScript |
-| Interface coverage | 19 MCP tools | CLI scripts | **46 MCP tools** |
+| Interface coverage | 19 MCP tools | CLI scripts | **47 MCP tools** |
 
 `m365-mcp` does not store a client secret or password. Tenant and client IDs are
 non-secret identifiers; sensitive OAuth access and refresh tokens are stored
@@ -203,7 +203,7 @@ node dist/auth-cli.js list
 
 Each account needs its own App Registration in its respective tenant. Tokens are isolated per account.
 
-## Available Tools (46)
+## Available Tools (47)
 
 ### 📧 Mail (9 tools)
 | Tool | Description |
@@ -218,10 +218,11 @@ Each account needs its own App Registration in its respective tenant. Tokens are
 | `m365_mail_mark_read` | Mark as read/unread |
 | `m365_mail_folders` | List all mail folders with counts |
 
-### 📅 Calendar (9 tools)
+### 📅 Calendar (10 tools)
 | Tool | Description |
 |---|---|
 | `m365_calendar_list` | Events in a date range (paginated) |
+| `m365_calendar_get` | Read an event and its notes, with bounded output and truncation status |
 | `m365_calendar_today` | Today's events, nicely formatted |
 | `m365_calendar_week` | Week view grouped by day |
 | `m365_calendar_create` | Create event (optional Teams meeting) |
@@ -230,6 +231,29 @@ Each account needs its own App Registration in its respective tenant. Tokens are
 | `m365_calendar_cancel` | Cancel an event you organize and notify attendees |
 | `m365_calendar_decline` | Decline an invitation as an attendee |
 | `m365_calendar_availability` | Free/busy lookup |
+
+#### Event notes and specific calendars
+
+`m365_calendar_list`, `m365_calendar_get`, `m365_calendar_create`, and
+`m365_calendar_update` accept an optional `calendarId` for a calendar under the
+signed-in user's `/me/calendars` collection. Omitting it preserves the existing
+`/me/events` or `/me/calendarView` behavior. IDs are opaque values, not URLs.
+
+Use `m365_calendar_get` with `eventId` to read notes. It returns
+`body: { contentType, content }`, `bodyLength`, and `bodyTruncated`. The default
+limit is 10,000 UTF-16 code units; `maxBodyChars` accepts integers from 0 to 50,000.
+Zero returns only body metadata. The original format is preserved, so HTML
+content remains HTML, and truncated HTML may be incomplete. List results remain
+compact and do not include full notes. Do not mistake truncated notes for the
+complete event body or write the truncated result back as a replacement.
+
+Create and update accept `bodyContentType: "text" | "html"` when supplying
+`body`; the default remains `"html"`. On update, omitting `body` leaves notes
+unchanged, while `body: ""` explicitly clears them. A body update replaces the
+existing notes; for online meetings, preserve the meeting details in that body.
+These operations use the existing delegated `Calendars.Read` /
+`Calendars.ReadWrite` permissions, with no additional OAuth scopes. The new get
+tool is available in read-only mode; create and update remain blocked there.
 
 Calendar listings include `isOrganizer` and `responseStatus` so clients can
 choose the correct action. Cancellation is organizer-only and notifies attendees;
