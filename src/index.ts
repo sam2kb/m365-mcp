@@ -28,6 +28,7 @@ import {
   envFlag,
   toolsForMode,
 } from "./security.js";
+import { SERVER_NAME, VERSION } from "./version.js";
 
 // ─── Config ──────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
 // ─── MCP Server ──────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "m365-mcp", version: "1.0.0" },
+  { name: SERVER_NAME, version: VERSION },
   { capabilities: { tools: {} } }
 );
 
@@ -157,7 +158,7 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
-    `m365-mcp v1.0.0 running (account: ${ACCOUNT_NAME ?? "default"}, tz: ${TIMEZONE}, read-only: ${READ_ONLY})`
+    `${SERVER_NAME} v${VERSION} running (account: ${ACCOUNT_NAME ?? "default"}, tz: ${TIMEZONE}, read-only: ${READ_ONLY})`
   );
 }
 
