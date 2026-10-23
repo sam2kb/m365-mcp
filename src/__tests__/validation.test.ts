@@ -16,9 +16,13 @@ describe("advertised tool argument validation", () => {
     ["m365_files_read", { itemId: "x", maxBytes: 1e12 }],
     ["m365_contacts_create", { emailAddresses: [{ name: "Missing address" }] }],
     ["m365_calendar_decline", { eventId: "x", sendResponse: "false" }],
+    ["m365_calendar_get", { eventId: "x", maxBodyChars: 50_001 }],
+    ["m365_calendar_get", { eventId: "x", maxBodyChars: null }],
+    ["m365_calendar_create", { subject: "x", start: "2026-07-18T12:00:00Z", end: "2026-07-18T13:00:00Z", body: "x", bodyContentType: "xml" }],
   ])("rejects invalid %s input", (tool, args) => expect(() => validate(tool as string, args)).toThrow("Invalid arguments"));
   it("accepts valid mail recipients and explicit false/zero values", () => {
     expect(() => validate("m365_mail_send", { to: "a@example.com", subject: "", html: false })).not.toThrow();
     expect(() => validate("m365_files_read", { itemId: "x", maxBytes: 0 })).not.toThrow();
+    expect(() => validate("m365_calendar_get", { eventId: "x", maxBodyChars: 0 })).not.toThrow();
   });
 });

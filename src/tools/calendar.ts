@@ -1,10 +1,25 @@
 /**
- * Calendar tools — list, today, week, create, update, cancel, decline, availability
+ * Calendar tools — list, get, today, week, create, update, cancel, decline, availability
  */
 
 import type { CalendarEvent } from "../types.js";
 import type { GraphClient } from "../graph.js";
 import { normalizeTop } from "../validation.js";
+
+function calendarScope(calendarId?: string): string {
+  if (calendarId === undefined) return "/me";
+  if (typeof calendarId !== "string" || !calendarId.trim() || calendarId === "." || calendarId === "..") {
+    throw new Error("calendarId must be a non-empty calendar ID");
+  }
+  return `/me/calendars/${encodeURIComponent(calendarId)}`;
+}
+
+function noteBody(content: string, contentType: "text" | "html" = "html") {
+  if (typeof content !== "string" || (contentType !== "text" && contentType !== "html")) {
+    throw new Error("body must be a string and bodyContentType must be text or html");
+  }
+  return { contentType: contentType === "text" ? "Text" : "HTML", content };
+}
 
 /** Build ISO 8601 start/end strings for a day in the given timezone. */
 export function tzDayBounds(timezone: string, offsetDays = 0): { startDateTime: string; endDateTime: string } {
@@ -57,18 +72,20 @@ export function registerCalendarTools(client: GraphClient) {
   return {
     // ── list ─────────────────────────────────────────────────────
     async calendar_list(args: {
+      calendarId?: string;
       startDateTime?: string;
       endDateTime?: string;
       top?: number;
     }): Promise<string> {
       const top = normalizeTop(args.top, 50);
+      const scope = calendarScope(args.calendarId);
       if (!!args.startDateTime !== !!args.endDateTime) throw new Error("Provide both startDateTime and endDateTime");
       let path: string;
 
       if (args.startDateTime && args.endDateTime) {
-        path = `${user}/calendarView?startDateTime=${encodeURIComponent(args.startDateTime)}&endDateTime=${encodeURIComponent(args.endDateTime)}&$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
+        path = `${scope}/calendarView?startDateTime=${encodeURIComponent(args.startDateTime)}&endDateTime=${encodeURIComponent(args.endDateTime)}&$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
       } else {
-        path = `${user}/events?$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
+        path = `${scope}/events?$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
       }
 
       const events = await client.getAll<CalendarEvent>(path, 10, top);
@@ -91,6 +108,35 @@ export function registerCalendarTools(client: GraphClient) {
         null,
         2
       );
+    },
+
+    // ── get ──────────────────────────────────────────────────────
+    async calendar_get(args: {
+      eventId: string;
+      calendarId?: string;
+      maxBodyChars?: number;
+    }): Promise<string> {
+      const limit = args.maxBodyChars ?? 10_000;
+      if (!Number.isInteger(limit) || limit < 0 || limit > 50_000) {
+        throw new Error("maxBodyChars must be an integer between 0 and 50000");
+      }
+      if (typeof args.eventId !== "string" || !args.eventId.trim() || args.eventId === "." || args.eventId === "..") {
+        throw new Error("eventId must be a non-empty event ID");
+      }
+      const event = await client.get<CalendarEvent>(
+        `${calendarScope(args.calendarId)}/events/${encodeURIComponent(args.eventId)}?$select=id,subject,start,end,body,webLink`
+      );
+      const content = event.body?.content ?? "";
+      return JSON.stringify({
+        id: event.id,
+        subject: event.subject,
+        start: event.start,
+        end: event.end,
+        body: { contentType: event.body?.contentType ?? "text", content: content.slice(0, limit) },
+        bodyTruncated: content.length > limit,
+        bodyLength: content.length,
+        webLink: event.webLink,
+      }, null, 2);
     },
 
     // ── today ────────────────────────────────────────────────────
@@ -149,10 +195,12 @@ export function registerCalendarTools(client: GraphClient) {
 
     // ── create ───────────────────────────────────────────────────
     async calendar_create(args: {
+      calendarId?: string;
       subject: string;
       start: string;
       end: string;
       body?: string;
+      bodyContentType?: "text" | "html";
       location?: string;
       attendees?: string;
       isOnline?: boolean;
@@ -162,7 +210,7 @@ export function registerCalendarTools(client: GraphClient) {
         start: client.dateTimeStr(args.start),
         end: client.dateTimeStr(args.end),
       };
-      if (args.body) event.body = { contentType: "HTML", content: args.body };
+      if (args.body !== undefined) event.body = noteBody(args.body, args.bodyContentType);
       if (args.location) event.location = { displayName: args.location };
       if (args.attendees) {
         event.attendees = args.attendees.split(",").map((s) => ({
@@ -172,7 +220,7 @@ export function registerCalendarTools(client: GraphClient) {
       }
       if (args.isOnline) { event.isOnlineMeeting = true; event.onlineMeetingProvider = "teamsForBusiness"; }
 
-      const data = await client.post<any>(`${user}/events`, event);
+      const data = await client.post<any>(`${calendarScope(args.calendarId)}/events`, event);
       return JSON.stringify(
         {
           id: data.id,
@@ -188,22 +236,24 @@ export function registerCalendarTools(client: GraphClient) {
     // ── update ───────────────────────────────────────────────────
     async calendar_update(args: {
       eventId: string;
+      calendarId?: string;
       subject?: string;
       start?: string;
       end?: string;
       body?: string;
+      bodyContentType?: "text" | "html";
       location?: string;
     }): Promise<string> {
       const patch: any = {};
       if (args.subject !== undefined) patch.subject = args.subject;
       if (args.start) patch.start = client.dateTimeStr(args.start);
       if (args.end) patch.end = client.dateTimeStr(args.end);
-      if (args.body !== undefined) patch.body = { contentType: "HTML", content: args.body };
+      if (args.body !== undefined) patch.body = noteBody(args.body, args.bodyContentType);
       if (args.location !== undefined) patch.location = { displayName: args.location };
       if (Object.keys(patch).length === 0) throw new Error("Provide at least one event field to update");
 
       const eventId = encodeURIComponent(args.eventId);
-      await client.patch(`${user}/events/${eventId}`, patch);
+      await client.patch(`${calendarScope(args.calendarId)}/events/${eventId}`, patch);
       return JSON.stringify({ success: true, eventId: args.eventId });
     },
 
@@ -262,10 +312,24 @@ export const calendarToolSchemas = [
     inputSchema: {
       type: "object",
       properties: {
+        calendarId: { type: "string", minLength: 1, description: "Optional calendar ID; omit to preserve the default /me event scope" },
         startDateTime: { type: "string", description: "Start datetime (ISO 8601)" },
         endDateTime: { type: "string", description: "End datetime (ISO 8601)" },
         top: { type: "integer", minimum: 1, maximum: 500, description: "Max events", default: 50 },
       },
+    },
+  },
+  {
+    name: "m365_calendar_get",
+    description: "Read one event including its notes, with body format, length and explicit truncation status",
+    inputSchema: {
+      type: "object",
+      properties: {
+        eventId: { type: "string", minLength: 1, description: "Event ID" },
+        calendarId: { type: "string", minLength: 1, description: "Optional calendar ID for a specific calendar" },
+        maxBodyChars: { type: "integer", minimum: 0, maximum: 50_000, default: 10_000, description: "Maximum returned note characters (UTF-16 code units); 0 returns metadata only" },
+      },
+      required: ["eventId"],
     },
   },
   {
@@ -284,10 +348,12 @@ export const calendarToolSchemas = [
     inputSchema: {
       type: "object",
       properties: {
+        calendarId: { type: "string", minLength: 1, description: "Optional calendar ID; omit for the default calendar" },
         subject: { type: "string", description: "Event title" },
         start: { type: "string", description: "Start datetime (ISO 8601)" },
         end: { type: "string", description: "End datetime (ISO 8601)" },
-        body: { type: "string", description: "Event description (HTML)" },
+        body: { type: "string", description: "Event notes; HTML by default" },
+        bodyContentType: { type: "string", enum: ["text", "html"], default: "html", description: "Format of the supplied body" },
         location: { type: "string", description: "Event location" },
         attendees: { type: "string", description: "Attendee emails, comma-separated" },
         isOnline: { type: "boolean", description: "Create as Teams meeting" },
@@ -302,10 +368,12 @@ export const calendarToolSchemas = [
       type: "object",
       properties: {
         eventId: { type: "string", description: "Event ID" },
+        calendarId: { type: "string", minLength: 1, description: "Optional calendar ID for a specific calendar" },
         subject: { type: "string", description: "New subject" },
         start: { type: "string", description: "New start time (ISO 8601)" },
         end: { type: "string", description: "New end time (ISO 8601)" },
-        body: { type: "string", description: "New description" },
+        body: { type: "string", description: "Replacement notes; omit to preserve, or pass an empty string to clear. For online meetings preserve the meeting details in the body." },
+        bodyContentType: { type: "string", enum: ["text", "html"], default: "html", description: "Format of the supplied body" },
         location: { type: "string", description: "New location" },
       },
       required: ["eventId"],

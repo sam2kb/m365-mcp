@@ -62,6 +62,7 @@ describe("security controls", () => {
   it("filters and blocks mutating tools in read-only mode", () => {
     const tools = annotateTools([
       { name: "m365_mail_list" },
+      { name: "m365_calendar_get" },
       { name: "m365_mail_send" },
       { name: "m365_mail_delete" },
       { name: "m365_calendar_cancel" },
@@ -70,6 +71,7 @@ describe("security controls", () => {
 
     expect(toolsForMode(tools, true).map((tool) => tool.name)).toEqual([
       "m365_mail_list",
+      "m365_calendar_get",
     ]);
     expect(() => assertToolAllowed("m365_mail_send", true)).toThrow(
       "M365_MCP_READ_ONLY",
@@ -87,6 +89,10 @@ describe("security controls", () => {
       "M365_MCP_READ_ONLY",
     );
     expect(() => assertToolAllowed("m365_mail_list", true)).not.toThrow();
+    expect(() => assertToolAllowed("m365_calendar_get", true)).not.toThrow();
+    expect(toolSafetyAnnotations("m365_calendar_get")).toEqual({
+      readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true,
+    });
   });
 
   it("preserves all tools when read-only mode is disabled", () => {
