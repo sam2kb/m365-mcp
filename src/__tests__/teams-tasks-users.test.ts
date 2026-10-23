@@ -66,7 +66,7 @@ describe("teams tools", () => {
     it("sends message with text content type", async () => {
       (client.post as any).mockResolvedValue({ id: "new-msg" });
       await tools.teams_send({ chatId: "chat1", message: "Hi team!" });
-      expect(client.post).toHaveBeenCalledWith("/me/chats/chat1/messages", {
+      expect(client.post).toHaveBeenCalledWith("/chats/chat1/messages", {
         body: { contentType: "text", content: "Hi team!" },
       });
     });
@@ -170,7 +170,7 @@ describe("users tools", () => {
       (client.getAll as any).mockResolvedValue([]);
       await tools.users_list({ search: "Alice", filter: "department eq 'Engineering'" });
       const path = (client.getAll as any).mock.calls[0][0] as string;
-      expect(path).toContain('$search="Alice"');
+      expect(decodeURIComponent(path)).toContain('$search="displayName:Alice" OR "mail:Alice"');
       expect(path).toContain("$count=true");
       expect(path).toContain("$filter=department%20eq%20'Engineering'");
       expect(client.getAll).toHaveBeenCalledWith(

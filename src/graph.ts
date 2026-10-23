@@ -12,13 +12,17 @@ import { getAccessToken } from "./auth.js";
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 const MAX_RETRIES = 4;
 const RETRY_BACKOFF_MS = 1000;
+const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_DOWNLOAD_BYTES = 1_000_000;
+const TRANSIENT_STATUSES = new Set([500, 502, 503, 504]);
 
 function retryDelayMs(retryAfter: string | null, fallbackMs: number): number {
-  if (!retryAfter) return fallbackMs;
+  if (!retryAfter?.trim()) return fallbackMs;
 
   const seconds = Number(retryAfter);
   if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
 
+  if (/^-?\d+(\.\d+)?$/.test(retryAfter.trim())) return fallbackMs;
   const retryAt = Date.parse(retryAfter);
   return Number.isNaN(retryAt) ? fallbackMs : Math.max(0, retryAt - Date.now());
 }
@@ -37,9 +41,9 @@ export class GraphClient {
     method = "GET",
     body?: unknown,
     raw = false,
-    additionalHeaders: Readonly<Record<string, string>> = {}
+    additionalHeaders: Readonly<Record<string, string>> = {},
+    retrySafe = method === "GET"
   ): Promise<T> {
-    const token = await getAccessToken(this.accountName);
     const url = path.startsWith("https://") ? path : `${GRAPH_BASE}${path}`;
     if (new URL(url).origin !== new URL(GRAPH_BASE).origin) {
       throw new Error("Graph API request URL must use graph.microsoft.com");
@@ -49,17 +53,20 @@ export class GraphClient {
     let delay = RETRY_BACKOFF_MS;
 
     while (true) {
+      const headers = new Headers({
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Prefer: `outlook.timezone="${this.timezone}"`,
+      });
+      for (const [key, value] of Object.entries(additionalHeaders)) headers.set(key, value);
+      // Headers is case-insensitive, so callers cannot override the selected token.
+      headers.set("Authorization", `Bearer ${await getAccessToken(this.accountName)}`);
       const opts: RequestInit = {
         method,
-        headers: {
-          ...additionalHeaders,
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Prefer: `outlook.timezone="${this.timezone}"`,
-        },
+        headers,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       };
-      if (body && method !== "GET") {
+      if (body !== undefined && method !== "GET") {
         opts.body = JSON.stringify(body);
       }
 
@@ -67,6 +74,9 @@ export class GraphClient {
       try {
         resp = await fetch(url, opts);
       } catch (error) {
+        if (!retrySafe) {
+          throw new Error("Graph write outcome is unknown after a connection failure. Check the target before retrying.", { cause: error });
+        }
         if (attempt >= MAX_RETRIES) throw error;
         await new Promise((r) => setTimeout(r, delay));
         attempt++;
@@ -84,6 +94,7 @@ export class GraphClient {
         }
         const retryAfter = resp.headers.get("Retry-After");
         const waitMs = retryDelayMs(retryAfter, delay);
+        await resp.body?.cancel();
         await new Promise((r) => setTimeout(r, waitMs));
         attempt++;
         delay *= 2;
@@ -91,11 +102,13 @@ export class GraphClient {
       }
 
       // Transient server error — retry
-      if (resp.status >= 500 && resp.status < 600) {
+      if (TRANSIENT_STATUSES.has(resp.status) && retrySafe) {
         if (attempt >= MAX_RETRIES) {
           throw new Error(`Graph API server error ${resp.status} after ${MAX_RETRIES} retries`);
         }
-        await new Promise((r) => setTimeout(r, delay));
+        const waitMs = retryDelayMs(resp.headers.get("Retry-After"), delay);
+        await resp.body?.cancel();
+        await new Promise((r) => setTimeout(r, waitMs));
         attempt++;
         delay *= 2;
         continue;
@@ -112,14 +125,14 @@ export class GraphClient {
       } catch {
         // Graph action endpoints such as sendMail commonly return 202 with
         // an empty body. A successful empty response is not an error.
-        if (resp.ok) return undefined as T;
+        if (resp.status === 202) return undefined as T;
         throw new Error(`Graph API ${resp.status}: unable to parse response`);
       }
 
       if (!resp.ok) {
         const err = parsed?.error as GraphError["error"] | undefined;
         throw new Error(
-          `Graph API ${resp.status}: ${err?.message ?? resp.statusText}`
+          `Graph API ${resp.status}${err?.code ? ` [${err.code}]` : ""}: ${err?.message ?? resp.statusText}${!retrySafe && resp.status >= 500 ? ". Write outcome may be unknown; check the target before retrying." : ""}`
         );
       }
 
@@ -144,6 +157,8 @@ export class GraphClient {
     maxItems = Infinity,
     additionalHeaders: Readonly<Record<string, string>> = {}
   ): Promise<T[]> {
+    if (!Number.isInteger(maxPages) || maxPages < 1) throw new Error("maxPages must be a positive integer");
+    if (maxItems !== Infinity && (!Number.isInteger(maxItems) || maxItems < 0)) throw new Error("maxItems must be a nonnegative integer");
     const results: T[] = [];
     let url: string | undefined = path;
     let pages = 0;
@@ -189,8 +204,8 @@ export class GraphClient {
   }
 
   /** POST */
-  async post<T>(path: string, body: unknown): Promise<T> {
-    return this.request<T>(path, "POST", body);
+  async post<T>(path: string, body: unknown, options: { retrySafe?: boolean } = {}): Promise<T> {
+    return this.request<T>(path, "POST", body, false, {}, options.retrySafe ?? false);
   }
 
   /** PATCH */
@@ -205,10 +220,14 @@ export class GraphClient {
 
   /** Download raw file content with retry on transient failures */
   async download(url: string, maxBytes = 50_000): Promise<string> {
+    if (!Number.isInteger(maxBytes) || maxBytes < 0 || maxBytes > MAX_DOWNLOAD_BYTES) {
+      throw new Error(`maxBytes must be an integer between 0 and ${MAX_DOWNLOAD_BYTES}`);
+    }
     const downloadUrl = new URL(url);
     if (downloadUrl.protocol !== "https:") {
       throw new Error("Download URL must use HTTPS");
     }
+    if (maxBytes === 0) return "";
 
     // Graph may return a pre-authenticated SharePoint/OneDrive download URL.
     // Never forward the Microsoft Graph bearer token to another origin.
@@ -222,20 +241,30 @@ export class GraphClient {
     let delay = RETRY_BACKOFF_MS;
 
     while (true) {
-      const resp = await fetch(url, {
-        headers,
-      });
+      let resp: Response;
+      try {
+        resp = await fetch(url, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      } catch (error) {
+        if (attempt >= MAX_RETRIES) throw error;
+        await new Promise((r) => setTimeout(r, delay));
+        attempt++;
+        delay *= 2;
+        continue;
+      }
 
       if (resp.status === 429 && attempt < MAX_RETRIES) {
         const retryAfter = resp.headers.get("Retry-After");
+        await resp.body?.cancel();
         await new Promise((r) => setTimeout(r, retryDelayMs(retryAfter, delay)));
         attempt++;
         delay *= 2;
         continue;
       }
 
-      if (resp.status >= 500 && resp.status < 600 && attempt < MAX_RETRIES) {
-        await new Promise((r) => setTimeout(r, delay));
+      if (TRANSIENT_STATUSES.has(resp.status) && attempt < MAX_RETRIES) {
+        const waitMs = retryDelayMs(resp.headers.get("Retry-After"), delay);
+        await resp.body?.cancel();
+        await new Promise((r) => setTimeout(r, waitMs));
         attempt++;
         delay *= 2;
         continue;
@@ -245,15 +274,36 @@ export class GraphClient {
         throw new Error(`Download failed: ${resp.status} ${resp.statusText}`);
       }
 
-      const buf = await resp.arrayBuffer();
-      // Truncate to text-safe size
-      const slice = buf.byteLength > maxBytes ? buf.slice(0, maxBytes) : buf;
-      return new TextDecoder().decode(slice);
+      if (!resp.body) return "";
+      const reader = resp.body.getReader();
+      const bytes = new Uint8Array(maxBytes);
+      let length = 0;
+      try {
+        while (length < maxBytes) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const take = Math.min(value.byteLength, maxBytes - length);
+          bytes.set(value.subarray(0, take), length);
+          length += take;
+        }
+      } finally {
+        // Cancellation closes the connection even if the server ignores Range.
+        try { await reader.cancel(); } catch { /* Preserve a read failure. */ }
+        reader.releaseLock();
+      }
+      return new TextDecoder().decode(bytes.subarray(0, length));
     }
   }
 
   /** Format a dateTimeTimeZone object for Graph API */
   dateTimeStr(iso: string): { dateTime: string; timeZone: string } {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,7})?)?(?:Z|[+-]\d{2}:\d{2})?$/i.test(iso) || !Number.isFinite(Date.parse(iso))) {
+      throw new Error("Expected an ISO 8601 date-time");
+    }
+    // An explicit offset is an instant; do not reinterpret it in the configured zone.
+    if (/(?:Z|[+-]\d{2}:\d{2})$/i.test(iso)) {
+      return { dateTime: new Date(iso).toISOString().replace(/Z$/, ""), timeZone: "UTC" };
+    }
     return { dateTime: iso, timeZone: this.timezone };
   }
 }

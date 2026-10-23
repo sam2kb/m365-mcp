@@ -77,6 +77,7 @@ export interface CalendarEvent {
   location?: { displayName: string };
   isOnlineMeeting: boolean;
   onlineMeetingUrl?: string;
+  onlineMeeting?: { joinUrl?: string };
   organizer?: { emailAddress: EmailAddress };
   attendees?: { emailAddress: EmailAddress; type: string; status: { response: string } }[];
   isOrganizer?: boolean;

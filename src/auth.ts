@@ -8,6 +8,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { randomUUID } from "node:crypto";
 import type { AccountConfig, AccountsStore, TokenData } from "./types.js";
 import { envFlag } from "./security.js";
 
@@ -23,7 +24,7 @@ const AUTH_DIR = resolveAuthDir();
 const ACCOUNTS_PATH = path.join(AUTH_DIR, "accounts.json");
 const TOKENS_DIR = path.join(AUTH_DIR, "tokens");
 
-// Scopes for delegated access — reads/writes YOUR data only, not the whole tenant.
+// Delegated scopes: Graph combines consent with the signed-in user's access.
 export function resolveScopes(env: NodeJS.ProcessEnv = process.env): string {
   const scopes = [
     "offline_access",
@@ -44,10 +45,12 @@ export function resolveScopes(env: NodeJS.ProcessEnv = process.env): string {
       "Calendars.ReadWrite",
       "Contacts.ReadWrite",
       "Tasks.ReadWrite",
-      "Chat.ReadWrite"
+      "Chat.ReadWrite",
+      "Files.ReadWrite"
     );
   }
 
+  if (envFlag(env.M365_MCP_DIRECTORY_READ)) scopes.push("User.Read.All");
   return scopes.join(" ");
 }
 
@@ -61,7 +64,32 @@ export function ensureDirs(): void {
 }
 
 export function getTokenPath(accountName: string): string {
+  validateAccountName(accountName);
   return path.join(TOKENS_DIR, `${accountName}.json`);
+}
+
+function validateAccountName(name: string): void {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(name) || /\.$/.test(name)) {
+    throw new Error("Account name must start with a letter or digit and contain at most 64 letters, digits, dots, underscores or hyphens");
+  }
+}
+
+function writePrivateJson(file: string, data: unknown): void {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, JSON.stringify(data, null, 2), { mode: 0o600, flag: "wx" });
+    fs.renameSync(temporary, file);
+  } finally {
+    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+  }
+}
+
+function hasRequestedScopes(scope: string): boolean {
+  const granted = new Set(scope.split(/\s+/));
+  const required = SCOPES.split(" ").filter((value) => value !== "offline_access");
+  if (!required.every((value) => granted.has(value))) return false;
+  return !envFlag(process.env.M365_MCP_READ_ONLY) ||
+    ![...granted].some((value) => /(?:\.ReadWrite(?:\.All)?|\.Send)$/.test(value));
 }
 
 // ─── account store ──────────────────────────────────────────────────
@@ -72,15 +100,18 @@ export function loadAccounts(): AccountsStore {
     return { default: null, accounts: {} };
   }
   try {
-    return JSON.parse(fs.readFileSync(ACCOUNTS_PATH, "utf8"));
-  } catch {
-    return { default: null, accounts: {} };
+    const store = JSON.parse(fs.readFileSync(ACCOUNTS_PATH, "utf8"));
+    if (!store || !store.accounts || typeof store.accounts !== "object" || Array.isArray(store.accounts) ||
+      (store.default !== null && typeof store.default !== "string")) throw new Error("Invalid account registry");
+    return store;
+  } catch (error) {
+    throw new Error("Cannot read account registry; restore accounts.json before changing accounts", { cause: error });
   }
 }
 
 function saveAccounts(store: AccountsStore): void {
   ensureDirs();
-  fs.writeFileSync(ACCOUNTS_PATH, JSON.stringify(store, null, 2), { mode: 0o600 });
+  writePrivateJson(ACCOUNTS_PATH, store);
 }
 
 export function addAccount(
@@ -90,7 +121,14 @@ export function addAccount(
   email?: string,
   description?: string
 ): void {
+  validateAccountName(name);
+  if (!tenantId.trim() || !clientId.trim()) throw new Error("tenantId and clientId are required");
   const store = loadAccounts();
+  const existing = Object.hasOwn(store.accounts, name) ? store.accounts[name] : undefined;
+  if (existing && (existing.tenantId !== tenantId || existing.clientId !== clientId)) {
+    const tokenPath = getTokenPath(name);
+    if (fs.existsSync(tokenPath)) fs.unlinkSync(tokenPath);
+  }
   store.accounts[name] = {
     tenantId,
     clientId,
@@ -103,6 +141,7 @@ export function addAccount(
 }
 
 export function removeAccount(name: string): void {
+  validateAccountName(name);
   const store = loadAccounts();
   delete store.accounts[name];
   const tokenPath = getTokenPath(name);
@@ -115,7 +154,8 @@ export function removeAccount(name: string): void {
 
 export function setDefaultAccount(name: string): void {
   const store = loadAccounts();
-  if (!store.accounts[name]) throw new Error(`Account "${name}" not found`);
+  validateAccountName(name);
+  if (!Object.hasOwn(store.accounts, name)) throw new Error(`Account "${name}" not found`);
   store.default = name;
   saveAccounts(store);
 }
@@ -126,8 +166,9 @@ export function resolveAccount(accountName?: string): AccountConfig {
   if (!name) throw new Error(
     "No account configured. Run: m365-mcp-auth add <name> <tenantId> <clientId>"
   );
+  validateAccountName(name);
+  if (!Object.hasOwn(store.accounts, name)) throw new Error(`Account "${name}" not found`);
   const acc = store.accounts[name];
-  if (!acc) throw new Error(`Account "${name}" not found`);
   return { name, ...acc, tokenPath: getTokenPath(name) };
 }
 
@@ -150,7 +191,9 @@ export function loadTokens(config: AccountConfig): TokenData | null {
   if (!fs.existsSync(config.tokenPath)) return null;
   try {
     const data = JSON.parse(fs.readFileSync(config.tokenPath, "utf8"));
-    if (!data.access_token || !data.refresh_token) return null;
+    if (typeof data?.access_token !== "string" || !data.access_token ||
+        typeof data.refresh_token !== "string" || !data.refresh_token ||
+        !Number.isFinite(data.expires_at) || data.expires_at <= 0 || typeof data.scope !== "string") return null;
     return data;
   } catch {
     return null;
@@ -166,7 +209,7 @@ function saveTokens(config: AccountConfig, tokens: TokenData): TokenData {
     expires_at: tokens.expires_at,
     scope: tokens.scope ?? SCOPES,
   };
-  fs.writeFileSync(config.tokenPath, JSON.stringify(data, null, 2), { mode: 0o600 });
+  writePrivateJson(config.tokenPath, data);
   return data;
 }
 
@@ -187,6 +230,7 @@ async function httpsPost(url: string, body: URLSearchParams): Promise<any> {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
+    signal: AbortSignal.timeout(30_000),
   });
   const data = await resp.json();
   if (!resp.ok) {
@@ -208,7 +252,7 @@ export async function requestDeviceCode(config: AccountConfig): Promise<{
   interval: number;
 }> {
   return httpsPost(
-    `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/devicecode`,
+    `https://login.microsoftonline.com/${encodeURIComponent(config.tenantId)}/oauth2/v2.0/devicecode`,
     new URLSearchParams({ client_id: config.clientId, scope: SCOPES })
   );
 }
@@ -218,7 +262,7 @@ async function pollForToken(
   config: AccountConfig
 ): Promise<TokenData> {
   const data = await httpsPost(
-    `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/token`,
+    `https://login.microsoftonline.com/${encodeURIComponent(config.tenantId)}/oauth2/v2.0/token`,
     new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:device_code",
       client_id: config.clientId,
@@ -237,7 +281,7 @@ async function pollForToken(
 
 async function refreshAccessToken(config: AccountConfig, refreshToken: string): Promise<TokenData> {
   const data = await httpsPost(
-    `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/token`,
+    `https://login.microsoftonline.com/${encodeURIComponent(config.tenantId)}/oauth2/v2.0/token`,
     new URLSearchParams({
       grant_type: "refresh_token",
       client_id: config.clientId,
@@ -274,6 +318,7 @@ export async function getAccessToken(accountName?: string): Promise<string> {
 
   // Still valid with 5-minute buffer
   if (tokens.expires_at > Date.now() + 5 * 60 * 1000) {
+    if (!hasRequestedScopes(tokens.scope)) throw new Error(`Permissions changed for "${config.name}". Re-authenticate: m365-mcp-auth login --account=${config.name}`);
     return tokens.access_token;
   }
 
@@ -291,7 +336,7 @@ export async function getAccessToken(accountName?: string): Promise<string> {
 async function doRefresh(config: AccountConfig, refreshToken: string): Promise<string> {
   // Double-check tokens haven't been refreshed by a concurrent caller
   const current = loadTokens(config);
-  if (current && current.expires_at > Date.now() + 5 * 60 * 1000) {
+  if (current && current.expires_at > Date.now() + 5 * 60 * 1000 && hasRequestedScopes(current.scope)) {
     return current.access_token;
   }
 
@@ -329,7 +374,7 @@ export async function authenticate(
 
   // Check existing
   const existing = loadTokens(config);
-  if (existing && existing.expires_at > Date.now() + 5 * 60 * 1000) {
+  if (existing && existing.expires_at > Date.now() + 5 * 60 * 1000 && hasRequestedScopes(existing.scope)) {
     return existing;
   }
 
@@ -339,13 +384,16 @@ export async function authenticate(
 
   // Poll
   const deadline = Date.now() + dc.expires_in * 1000;
+  let interval = dc.interval ?? 5;
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, dc.interval * 1000));
+    await new Promise((r) => setTimeout(r, interval * 1000));
+    if (Date.now() >= deadline) break;
     try {
       const tokens = await pollForToken(dc.device_code, config);
       return saveTokens(config, tokens);
     } catch (err: any) {
       const errorCode = err instanceof OAuthError ? err.code : undefined;
+      if (errorCode === "slow_down") { interval += 5; continue; }
       if (
         errorCode === "authorization_pending" ||
         err.message.includes("AADSTS70016")

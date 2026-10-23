@@ -2,9 +2,9 @@
  * Tests for calendar tools
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { GraphClient } from "../graph.js";
-import { registerCalendarTools, calendarToolSchemas } from "../tools/calendar.js";
+import { registerCalendarTools, calendarToolSchemas, tzDayBounds } from "../tools/calendar.js";
 
 function mockClient(overrides: Partial<GraphClient> = {}): GraphClient {
   return {
@@ -90,6 +90,7 @@ describe("calendar tools", () => {
         subject: "Sync",
         webLink: "https://...",
         onlineMeetingUrl: null,
+        onlineMeeting: { joinUrl: "https://teams.microsoft.com/join" },
       });
       const result = await tools.calendar_create({
         subject: "Sync",
@@ -103,6 +104,7 @@ describe("calendar tools", () => {
       expect(client.post).toHaveBeenCalledWith("/me/events", expect.objectContaining({
         subject: "Sync",
         isOnlineMeeting: true,
+        onlineMeetingProvider: "teamsForBusiness",
         attendees: [
           { emailAddress: { address: "a@b.com" }, type: "required" },
           { emailAddress: { address: "c@d.com" }, type: "required" },
@@ -110,6 +112,7 @@ describe("calendar tools", () => {
       }));
       const parsed = JSON.parse(result);
       expect(parsed.id).toBe("new-ev");
+      expect(parsed.onlineMeetingUrl).toBe("https://teams.microsoft.com/join");
     });
   });
 
@@ -165,7 +168,7 @@ describe("calendar tools", () => {
       });
       expect(client.post).toHaveBeenCalledWith("/me/calendar/getSchedule", expect.objectContaining({
         schedules: ["a@b.com", "c@d.com"],
-      }));
+      }), { retrySafe: true });
     });
   });
 
@@ -174,5 +177,36 @@ describe("calendar tools", () => {
       expect(calendarToolSchemas).toHaveLength(9);
       expect(calendarToolSchemas.some((schema) => schema.name === "m365_calendar_remove")).toBe(false);
     });
+  });
+});
+
+describe("calendar timezone regressions", () => {
+  afterEach(() => vi.useRealTimers());
+  it.each([
+    ["2026-03-08T12:00:00Z", "2026-03-08T05:00:00.000Z", "2026-03-09T03:59:59.999Z"],
+    ["2026-11-01T12:00:00Z", "2026-11-01T04:00:00.000Z", "2026-11-02T04:59:59.999Z"],
+  ])("uses separate midnight offsets across DST on %s", (now, start, end) => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date(now));
+    expect(tzDayBounds("America/New_York")).toEqual({ startDateTime: start, endDateTime: end });
+  });
+  it("uses the configured date when the host is already on the next UTC day", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-07-19T01:00:00Z"));
+    const client = mockClient({ timezone: "America/Los_Angeles" });
+    vi.mocked(client.getAll).mockResolvedValue([{
+      subject: "Local evening", start: { dateTime: "2026-07-19T01:00:00", timeZone: "UTC" },
+      end: { dateTime: "2026-07-19T02:00:00", timeZone: "UTC" },
+    }]);
+    const result = await registerCalendarTools(client).calendar_today();
+    expect(result).toContain("July 18");
+    expect(result).toContain("6:00 PM");
+    expect(client.getAll).toHaveBeenCalledWith(expect.any(String), 10, 50, { Prefer: 'outlook.timezone="UTC"' });
+  });
+  it("rejects half a date range", async () => {
+    await expect(registerCalendarTools(mockClient()).calendar_list({ startDateTime: "2026-07-01T00:00:00Z" })).rejects.toThrow("both");
+  });
+  it("clears event body/location when empty strings are supplied", async () => {
+    const client = mockClient();
+    await registerCalendarTools(client).calendar_update({ eventId: "event", body: "", location: "" });
+    expect(client.patch).toHaveBeenCalledWith("/me/events/event", { body: { contentType: "HTML", content: "" }, location: { displayName: "" } });
   });
 });

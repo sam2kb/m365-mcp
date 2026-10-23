@@ -4,14 +4,15 @@
 
 import type { TeamsChat, TeamsMessage } from "../types.js";
 import type { GraphClient } from "../graph.js";
+import { normalizeTop } from "../validation.js";
 
 export function registerTeamsTools(client: GraphClient) {
   const user = "/me";
 
   return {
     async teams_chats(args: { top?: number }): Promise<string> {
-      const top = args.top || 20;
-      const path = `${user}/chats?$top=${top}&$expand=members`;
+      const top = normalizeTop(args.top, 20);
+      const path = `${user}/chats?$top=${Math.min(top, 50)}&$expand=members`;
       const chats = await client.getAll<TeamsChat>(path, 10, top);
       chats.sort(
         (a, b) =>
@@ -32,9 +33,9 @@ export function registerTeamsTools(client: GraphClient) {
     },
 
     async teams_messages(args: { chatId: string; top?: number }): Promise<string> {
-      const top = args.top || 30;
+      const top = normalizeTop(args.top, 30);
       const chatId = encodeURIComponent(args.chatId);
-      const path = `${user}/chats/${chatId}/messages?$top=${top}&$orderby=createdDateTime desc`;
+      const path = `${user}/chats/${chatId}/messages?$top=${Math.min(top, 50)}&$orderby=createdDateTime desc`;
       const msgs = await client.getAll<TeamsMessage>(path, 10, top);
       return JSON.stringify(
         msgs.map((m) => ({
@@ -52,7 +53,7 @@ export function registerTeamsTools(client: GraphClient) {
     async teams_send(args: { chatId: string; message: string }): Promise<string> {
       const chatId = encodeURIComponent(args.chatId);
       const data = await client.post<any>(
-        `${user}/chats/${chatId}/messages`,
+        `/chats/${chatId}/messages`,
         { body: { contentType: "text", content: args.message } }
       );
       return JSON.stringify({ id: data.id, success: true }, null, 2);
@@ -67,7 +68,7 @@ export const teamsToolSchemas = [
     inputSchema: {
       type: "object",
       properties: {
-        top: { type: "number", description: "Max chats", default: 20 },
+        top: { type: "integer", minimum: 1, maximum: 500, description: "Max chats", default: 20 },
       },
     },
   },
@@ -78,7 +79,7 @@ export const teamsToolSchemas = [
       type: "object",
       properties: {
         chatId: { type: "string", description: "Chat ID (from m365_teams_chats)" },
-        top: { type: "number", description: "Max messages", default: 30 },
+        top: { type: "integer", minimum: 1, maximum: 500, description: "Max messages", default: 30 },
       },
       required: ["chatId"],
     },

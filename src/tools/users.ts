@@ -4,17 +4,20 @@
 
 import type { OrgUser } from "../types.js";
 import type { GraphClient } from "../graph.js";
+import { normalizeTop } from "../validation.js";
 
 export function registerUsersTools(client: GraphClient) {
   return {
     async users_list(args: { top?: number; filter?: string; search?: string }): Promise<string> {
-      const top = args.top || 50;
+      const top = normalizeTop(args.top, 50);
       const search = args.search?.trim();
       let path = `/users?$top=${top}&$select=id,displayName,mail,userPrincipalName,jobTitle,department,officeLocation`;
       if (args.filter) path += `&$filter=${encodeURIComponent(args.filter)}`;
       const headers: Record<string, string> = {};
       if (search) {
-        path += `&$search="${encodeURIComponent(search)}"&$count=true`;
+        const literal = search.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        const expression = `"displayName:${literal}" OR "mail:${literal}"`;
+        path += `&$search=${encodeURIComponent(expression)}&$count=true`;
         headers.ConsistencyLevel = "eventual";
       }
       const users = await client.getAll<OrgUser>(path, 10, top, headers);
@@ -48,7 +51,7 @@ export const usersToolSchemas = [
     inputSchema: {
       type: "object",
       properties: {
-        top: { type: "number", description: "Max results", default: 50 },
+        top: { type: "integer", minimum: 1, maximum: 500, description: "Max results", default: 50 },
         filter: { type: "string", description: "OData filter" },
         search: { type: "string", description: "Search by displayName or mail" },
       },

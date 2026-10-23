@@ -21,6 +21,9 @@ metadata:
       - name: M365_MCP_READ_ONLY
         required: false
         description: Set true to request read-only scopes and disable all mutating tools.
+      - name: M365_MCP_DIRECTORY_READ
+        required: false
+        description: Opt in to delegated User.Read.All for organization directory tools; requires admin consent.
     install:
       - kind: node
         package: "@sam2kb/m365-mcp"
@@ -71,8 +74,9 @@ Production-grade Microsoft 365 MCP server combining the best of office365-connec
 
 ## Security and consent
 
-- The server contacts only Microsoft's OAuth and Graph services:
-  `login.microsoftonline.com` and `graph.microsoft.com`.
+- OAuth and API requests use `login.microsoftonline.com` and `graph.microsoft.com`.
+  File reads also use HTTPS download URLs supplied by Graph, including OneDrive
+  and SharePoint hosts. Off-origin downloads do not receive the Graph bearer token.
 - Device-code OAuth grants delegated access as the signed-in user. Read tools can
   expose private mail, files, calendars, contacts, Teams chats, tasks, and user data.
 - Send, reply, move, create, update, cancel, decline, and delete tools change real Microsoft 365
@@ -86,6 +90,10 @@ Production-grade Microsoft 365 MCP server combining the best of office365-connec
   `~/.m365-mcp/auth/` (or `M365_MCP_AUTH_DIR`), protected with directory mode
   `0700` and file mode `0600` where supported. Protect that directory and revoke
   the app's Microsoft account consent if a token or device is compromised.
+- File reads stop at `maxBytes` (50,000 by default; maximum 1,000,000).
+- Set `M365_MCP_DIRECTORY_READ=true` during login and server startup to request
+  organization directory access with admin consent. Sign in again after changing
+  scope settings or an account's tenant/client registration.
 
 ## Setup
 

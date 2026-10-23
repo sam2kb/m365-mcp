@@ -15,6 +15,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { GraphClient } from "./graph.js";
+import { createArgumentValidator } from "./validation.js";
+import { VERSION } from "./version.js";
 import { registerMailTools, mailToolSchemas } from "./tools/mail.js";
 import { registerCalendarTools, calendarToolSchemas } from "./tools/calendar.js";
 import { registerContactsTools, contactsToolSchemas } from "./tools/contacts.js";
@@ -58,11 +60,13 @@ const allTools = toolsForMode(annotateTools([
   ...tasksToolSchemas,
   ...usersToolSchemas,
 ]), READ_ONLY);
+const validateArguments = createArgumentValidator(allTools);
 
 // ─── Tool router ─────────────────────────────────────────────────────
 
 async function handleToolCall(name: string, args: Record<string, unknown>): Promise<string> {
   assertToolAllowed(name, READ_ONLY);
+  validateArguments(name, args);
 
   // Mail
   if (name === "m365_mail_list") return mailTools.mail_list(args as any);
@@ -130,7 +134,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>): Prom
 // ─── MCP Server ──────────────────────────────────────────────────────
 
 const server = new Server(
-  { name: "m365-mcp", version: "1.0.0" },
+  { name: "m365-mcp", version: VERSION },
   { capabilities: { tools: {} } }
 );
 
@@ -157,8 +161,8 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
-    `m365-mcp v1.0.0 running (account: ${ACCOUNT_NAME ?? "default"}, tz: ${TIMEZONE}, read-only: ${READ_ONLY})`
+    `m365-mcp v${VERSION} running (account: ${ACCOUNT_NAME ?? "default"}, tz: ${TIMEZONE}, read-only: ${READ_ONLY})`
   );
 }
 
-main().catch(console.error);
+main().catch((error) => { console.error(error); process.exitCode = 1; });

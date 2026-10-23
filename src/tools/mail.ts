@@ -4,6 +4,7 @@
 
 import type { EmailMessage } from "../types.js";
 import type { GraphClient } from "../graph.js";
+import { normalizeTop } from "../validation.js";
 
 function newestFirst(messages: EmailMessage[]): EmailMessage[] {
   const timestamp = (value?: string) => {
@@ -27,16 +28,18 @@ export function registerMailTools(client: GraphClient) {
       search?: string;
     }): Promise<string> {
       const folder = args.folder || "inbox";
-      const top = args.top || 20;
+      const top = normalizeTop(args.top, 20);
       const search = args.search?.trim();
       let path = `${user}/mailFolders/${encodeURIComponent(folder)}/messages?$top=${top}&$select=id,subject,from,receivedDateTime,isRead,bodyPreview,hasAttachments,importance,webLink`;
 
-      if (!search) path += `&$orderby=receivedDateTime desc`;
+      if (search && args.filter) throw new Error("Use search or filter, not both, for mail queries");
+      // Arbitrary filters cannot safely be combined with Outlook's sort rules.
+      if (!search && !args.filter) path += `&$orderby=receivedDateTime desc`;
       if (args.filter) path += `&$filter=${encodeURIComponent(args.filter)}`;
       if (search) path += `&$search="${encodeURIComponent(search)}"`;
 
       const msgs = await client.getAll<EmailMessage>(path, 10, top);
-      const ordered = search ? newestFirst(msgs) : msgs;
+      const ordered = search || args.filter ? newestFirst(msgs) : msgs;
       return JSON.stringify(
         ordered.map((m) => ({
           id: m.id,
@@ -130,7 +133,8 @@ export function registerMailTools(client: GraphClient) {
 
     // ── search ───────────────────────────────────────────────────
     async mail_search(args: { query: string; top?: number }): Promise<string> {
-      const top = args.top || 20;
+      const top = normalizeTop(args.top, 20);
+      if (!args.query.trim()) throw new Error("query cannot be empty");
       const path = `${user}/messages?$search="${encodeURIComponent(args.query.trim())}"&$top=${top}`;
       const msgs = newestFirst(await client.getAll<EmailMessage>(path, 10, top));
       return JSON.stringify(
@@ -200,7 +204,7 @@ export const mailToolSchemas = [
       type: "object",
       properties: {
         folder: { type: "string", description: "Folder name: inbox, sentitems, drafts, etc." },
-        top: { type: "number", description: "Number of emails (max 100 per page, paginated)" },
+        top: { type: "integer", minimum: 1, maximum: 500, description: "Maximum emails to return" },
         filter: { type: "string", description: "OData filter, e.g. isRead eq false" },
         search: { type: "string", description: "Search query within folder" },
       },
@@ -253,7 +257,7 @@ export const mailToolSchemas = [
       type: "object",
       properties: {
         query: { type: "string", description: "Search query (supports KQL)" },
-        top: { type: "number", description: "Max results", default: 20 },
+        top: { type: "integer", minimum: 1, maximum: 500, description: "Max results", default: 20 },
       },
       required: ["query"],
     },

@@ -54,12 +54,12 @@ describe("mail tools", () => {
       );
     });
 
-    it("uses server-side ordering when search is absent", async () => {
+    it("avoids incompatible ordering when an arbitrary filter is supplied", async () => {
       (client.getAll as any).mockResolvedValue([]);
       await tools.mail_list({ filter: "isRead eq false" });
       const path = (client.getAll as any).mock.calls[0][0] as string;
       expect(path).toContain("$filter=isRead%20eq%20false");
-      expect(path).toContain("$orderby=receivedDateTime desc");
+      expect(path).not.toContain("$orderby");
     });
 
     it("omits unsupported orderby and sorts folder search results locally", async () => {

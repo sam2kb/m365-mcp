@@ -4,6 +4,7 @@
 
 import type { DriveItem } from "../types.js";
 import type { GraphClient } from "../graph.js";
+import { normalizeTop } from "../validation.js";
 
 function encodeDrivePath(value: string): string {
   return value.split("/").filter(Boolean).map(encodeURIComponent).join("/");
@@ -14,7 +15,7 @@ export function registerFilesTools(client: GraphClient) {
 
   return {
     async files_list(args: { path?: string; top?: number }): Promise<string> {
-      const top = args.top || 50;
+      const top = normalizeTop(args.top, 50);
       const folderPath = args.path ? `:/${encodeDrivePath(args.path)}:` : "";
       const path = `${user}/drive/root${folderPath}/children?$top=${top}&$select=id,name,size,folder,file,webUrl,lastModifiedDateTime`;
       const items = await client.getAll<DriveItem>(path, 10, top);
@@ -35,7 +36,7 @@ export function registerFilesTools(client: GraphClient) {
     },
 
     async files_search(args: { query: string; top?: number }): Promise<string> {
-      const top = args.top || 20;
+      const top = normalizeTop(args.top, 20);
       const query = encodeURIComponent(args.query.replace(/'/g, "''")).replace(/'/g, "%27");
       const path = `${user}/drive/root/search(q='${query}')?$top=${top}&$select=id,name,size,file,webUrl,parentReference`;
       const items = await client.getAll<DriveItem>(path, 10, top);
@@ -97,7 +98,7 @@ export const filesToolSchemas = [
       type: "object",
       properties: {
         path: { type: "string", description: "Folder path (e.g. Documents/Work)" },
-        top: { type: "number", description: "Max results", default: 50 },
+        top: { type: "integer", minimum: 1, maximum: 500, description: "Max results", default: 50 },
       },
     },
   },
@@ -108,7 +109,7 @@ export const filesToolSchemas = [
       type: "object",
       properties: {
         query: { type: "string", description: "Search query" },
-        top: { type: "number", description: "Max results", default: 20 },
+        top: { type: "integer", minimum: 1, maximum: 500, description: "Max results", default: 20 },
       },
       required: ["query"],
     },
@@ -120,7 +121,7 @@ export const filesToolSchemas = [
       type: "object",
       properties: {
         itemId: { type: "string", description: "File item ID from list/search" },
-        maxBytes: { type: "number", description: "Max bytes to read (default 50000)" },
+        maxBytes: { type: "integer", minimum: 0, maximum: 1000000, description: "Max bytes to read (default 50000; maximum 1000000)" },
       },
       required: ["itemId"],
     },

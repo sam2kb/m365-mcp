@@ -25,7 +25,7 @@ async function main() {
   const cmd = args[0];
   const rest = args.slice(1);
   const accountArg = rest.find((a) => a.startsWith("--account="));
-  const accountName = accountArg ? accountArg.split("=")[1] : undefined;
+  const accountName = accountArg ? accountArg.slice("--account=".length) : undefined;
   const positional = rest.filter((a) => !a.startsWith("--"));
 
   try {

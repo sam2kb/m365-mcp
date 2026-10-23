@@ -8,3 +8,5 @@ scripts/
 src/
 tsconfig.json
 vitest.config.ts
+.codex/
+openclas-m365-mcp.png

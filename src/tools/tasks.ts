@@ -4,6 +4,7 @@
 
 import type { TodoList, TodoTask } from "../types.js";
 import type { GraphClient } from "../graph.js";
+import { normalizeTop } from "../validation.js";
 
 export function registerTasksTools(client: GraphClient) {
   const user = "/me";
@@ -24,7 +25,7 @@ export function registerTasksTools(client: GraphClient) {
     },
 
     async tasks_list(args: { listId: string; top?: number; filter?: string }): Promise<string> {
-      const top = args.top || 50;
+      const top = normalizeTop(args.top, 50);
       let path = `${user}/todo/lists/${encodeURIComponent(args.listId)}/tasks?$top=${top}&$orderby=createdDateTime desc`;
       if (args.filter) path += `&$filter=${encodeURIComponent(args.filter)}`;
       const tasks = await client.getAll<TodoTask>(path, 10, top);
@@ -78,10 +79,11 @@ export function registerTasksTools(client: GraphClient) {
       due?: string;
     }): Promise<string> {
       const patch: any = {};
-      if (args.title) patch.title = args.title;
+      if (args.title !== undefined) patch.title = args.title;
       if (args.status) patch.status = args.status;
       if (args.importance) patch.importance = args.importance;
       if (args.due) patch.dueDateTime = { dateTime: args.due, timeZone: "UTC" };
+      if (Object.keys(patch).length === 0) throw new Error("Provide at least one task field to update");
 
       const taskId = encodeURIComponent(args.taskId);
       await client.patch(
@@ -114,7 +116,7 @@ export const tasksToolSchemas = [
       type: "object",
       properties: {
         listId: { type: "string", description: "Task list ID (from m365_tasks_lists)" },
-        top: { type: "number", description: "Max tasks", default: 50 },
+        top: { type: "integer", minimum: 1, maximum: 500, description: "Max tasks", default: 50 },
         filter: { type: "string", description: "OData filter, e.g. status ne 'completed'" },
       },
       required: ["listId"],

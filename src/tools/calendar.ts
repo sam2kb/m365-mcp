@@ -4,33 +4,40 @@
 
 import type { CalendarEvent } from "../types.js";
 import type { GraphClient } from "../graph.js";
+import { normalizeTop } from "../validation.js";
 
 /** Build ISO 8601 start/end strings for a day in the given timezone. */
-function tzDayBounds(timezone: string, offsetDays = 0): { startDateTime: string; endDateTime: string } {
-  const d = new Date(Date.now() + offsetDays * 86400000);
-  const dateStr = d.toLocaleDateString("en-CA", { timeZone: timezone }); // "2026-07-18"
-
-  // Determine the UTC offset at noon (DST-safe) via formatToParts
-  const parts = Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZoneName: "longOffset",
-  }).formatToParts(d);
-
-  let offset = "+00:00";
-  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
-  const m = tzPart.match(/GMT([+-]\d{1,2}):?(\d{2})?/);
-  if (m) offset = `${m[1]}:${m[2] || "00"}`;
-
-  return {
-    startDateTime: `${dateStr}T00:00:00${offset}`,
-    endDateTime: `${dateStr}T23:59:59${offset}`,
+export function tzDayBounds(timezone: string, offsetDays = 0): { startDateTime: string; endDateTime: string } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => Number(parts.find((value) => value.type === type)!.value);
+  const date = Date.UTC(part("year"), part("month") - 1, part("day") + offsetDays);
+  const offsetFormatter = new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "longOffset" });
+  const midnight = (localDate: number) => {
+    let instant = localDate;
+    let previous = instant;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const zone = offsetFormatter.formatToParts(new Date(instant)).find((value) => value.type === "timeZoneName")!.value;
+      const match = zone.match(/GMT([+-])(\d{2}):(\d{2})/);
+      const offset = match ? (Number(match[2]) * 60 + Number(match[3])) * 60_000 * (match[1] === "+" ? 1 : -1) : 0;
+      const next = localDate - offset;
+      if (next === instant) return instant;
+      previous = instant;
+      instant = next;
+    }
+    // If midnight is skipped by a zone transition, choose the first later instant.
+    return Math.max(previous, instant);
   };
+  return {
+    startDateTime: new Date(midnight(date)).toISOString(),
+    endDateTime: new Date(midnight(date + 86400000) - 1).toISOString(),
+  };
+}
+
+// Today/week explicitly request UTC, then render in the configured timezone.
+function utcEventDate(value: string): Date {
+  return new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`);
 }
 
 export function registerCalendarTools(client: GraphClient) {
@@ -54,13 +61,14 @@ export function registerCalendarTools(client: GraphClient) {
       endDateTime?: string;
       top?: number;
     }): Promise<string> {
-      const top = args.top || 50;
+      const top = normalizeTop(args.top, 50);
+      if (!!args.startDateTime !== !!args.endDateTime) throw new Error("Provide both startDateTime and endDateTime");
       let path: string;
 
       if (args.startDateTime && args.endDateTime) {
-        path = `${user}/calendarView?startDateTime=${encodeURIComponent(args.startDateTime)}&endDateTime=${encodeURIComponent(args.endDateTime)}&$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
+        path = `${user}/calendarView?startDateTime=${encodeURIComponent(args.startDateTime)}&endDateTime=${encodeURIComponent(args.endDateTime)}&$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
       } else {
-        path = `${user}/events?$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
+        path = `${user}/events?$top=${top}&$orderby=start/dateTime&$select=id,subject,start,end,location,isOnlineMeeting,onlineMeeting,onlineMeetingUrl,organizer,attendees,isAllDay,isOrganizer,responseStatus,webLink`;
       }
 
       const events = await client.getAll<CalendarEvent>(path, 10, top);
@@ -73,7 +81,7 @@ export function registerCalendarTools(client: GraphClient) {
           isAllDay: e.isAllDay,
           location: e.location?.displayName,
           isOnline: e.isOnlineMeeting,
-          meetingUrl: e.onlineMeetingUrl,
+          meetingUrl: e.onlineMeeting?.joinUrl ?? e.onlineMeetingUrl,
           organizer: e.organizer?.emailAddress?.name ?? e.organizer?.emailAddress?.address,
           attendees: e.attendees?.length ?? 0,
           isOrganizer: e.isOrganizer,
@@ -90,24 +98,24 @@ export function registerCalendarTools(client: GraphClient) {
       const bounds = tzDayBounds(client.timezone);
 
       const path = `${user}/calendarView?startDateTime=${encodeURIComponent(bounds.startDateTime)}&endDateTime=${encodeURIComponent(bounds.endDateTime)}&$top=50&$orderby=start/dateTime`;
-      const events = await client.getAll<CalendarEvent>(path, 10, 50);
+      const events = await client.getAll<CalendarEvent>(path, 10, 50, { Prefer: 'outlook.timezone="UTC"' });
 
       if (events.length === 0) return "No events today.";
 
       const now = new Date();
       const lines = events.map((e) => {
-        const startTime = new Date(e.start.dateTime + (e.start.dateTime.endsWith("Z") ? "" : "Z"));
-        const endTime = new Date(e.end.dateTime + (e.end.dateTime.endsWith("Z") ? "" : "Z"));
+        const startTime = utcEventDate(e.start.dateTime);
+        const endTime = utcEventDate(e.end.dateTime);
         const time = e.isAllDay
           ? "All Day"
-          : `${startTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}–${endTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+          : `${startTime.toLocaleTimeString("en-US", { timeZone: client.timezone, hour: "numeric", minute: "2-digit" })}–${endTime.toLocaleTimeString("en-US", { timeZone: client.timezone, hour: "numeric", minute: "2-digit" })}`;
         let line = `${time}  ${e.subject}`;
         if (e.location?.displayName) line += `  📍 ${e.location.displayName}`;
         if (e.isOnlineMeeting) line += `  🎥`;
         return line;
       });
 
-      return `Today (${now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })})\n${lines.join("\n")}\n\n${events.length} event${events.length !== 1 ? "s" : ""}`;
+      return `Today (${now.toLocaleDateString("en-US", { timeZone: client.timezone, weekday: "long", month: "long", day: "numeric" })})\n${lines.join("\n")}\n\n${events.length} event${events.length !== 1 ? "s" : ""}`;
     },
 
     // ── week ─────────────────────────────────────────────────────
@@ -116,15 +124,15 @@ export function registerCalendarTools(client: GraphClient) {
       const endBounds = tzDayBounds(client.timezone, 6);
 
       const path = `${user}/calendarView?startDateTime=${encodeURIComponent(startBounds.startDateTime)}&endDateTime=${encodeURIComponent(endBounds.endDateTime)}&$top=100&$orderby=start/dateTime`;
-      const events = await client.getAll<CalendarEvent>(path, 10, 100);
+      const events = await client.getAll<CalendarEvent>(path, 10, 100, { Prefer: 'outlook.timezone="UTC"' });
 
       if (events.length === 0) return "No events this week.";
 
       const byDay = new Map<string, string[]>();
       for (const e of events) {
-        const d = new Date(e.start.dateTime + (e.start.dateTime.endsWith("Z") ? "" : "Z"));
-        const key = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-        const startTime = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+        const d = utcEventDate(e.start.dateTime);
+        const key = d.toLocaleDateString("en-US", { timeZone: client.timezone, weekday: "short", month: "short", day: "numeric" });
+        const startTime = d.toLocaleTimeString("en-US", { timeZone: client.timezone, hour: "numeric", minute: "2-digit" });
         let line = `  ${e.isAllDay ? "All Day" : startTime}  ${e.subject}`;
         if (e.location?.displayName) line += `  📍 ${e.location.displayName}`;
         if (e.isOnlineMeeting) line += `  🎥`;
@@ -162,7 +170,7 @@ export function registerCalendarTools(client: GraphClient) {
           type: "required",
         }));
       }
-      if (args.isOnline) event.isOnlineMeeting = true;
+      if (args.isOnline) { event.isOnlineMeeting = true; event.onlineMeetingProvider = "teamsForBusiness"; }
 
       const data = await client.post<any>(`${user}/events`, event);
       return JSON.stringify(
@@ -170,7 +178,7 @@ export function registerCalendarTools(client: GraphClient) {
           id: data.id,
           subject: data.subject,
           webLink: data.webLink,
-          onlineMeetingUrl: data.onlineMeetingUrl,
+          onlineMeetingUrl: data.onlineMeeting?.joinUrl ?? data.onlineMeetingUrl,
         },
         null,
         2
@@ -187,11 +195,12 @@ export function registerCalendarTools(client: GraphClient) {
       location?: string;
     }): Promise<string> {
       const patch: any = {};
-      if (args.subject) patch.subject = args.subject;
+      if (args.subject !== undefined) patch.subject = args.subject;
       if (args.start) patch.start = client.dateTimeStr(args.start);
       if (args.end) patch.end = client.dateTimeStr(args.end);
-      if (args.body) patch.body = { contentType: "HTML", content: args.body };
-      if (args.location) patch.location = { displayName: args.location };
+      if (args.body !== undefined) patch.body = { contentType: "HTML", content: args.body };
+      if (args.location !== undefined) patch.location = { displayName: args.location };
+      if (Object.keys(patch).length === 0) throw new Error("Provide at least one event field to update");
 
       const eventId = encodeURIComponent(args.eventId);
       await client.patch(`${user}/events/${eventId}`, patch);
@@ -240,7 +249,7 @@ export function registerCalendarTools(client: GraphClient) {
         startTime: client.dateTimeStr(args.startDateTime),
         endTime: client.dateTimeStr(args.endDateTime),
         availabilityViewInterval: 30,
-      });
+      }, { retrySafe: true });
       return JSON.stringify(data.value, null, 2);
     },
   };
@@ -249,13 +258,13 @@ export function registerCalendarTools(client: GraphClient) {
 export const calendarToolSchemas = [
   {
     name: "m365_calendar_list",
-    description: "List calendar events in a date range (or upcoming if no range)",
+    description: "List calendar events; supply both dates to expand recurring events within a range",
     inputSchema: {
       type: "object",
       properties: {
         startDateTime: { type: "string", description: "Start datetime (ISO 8601)" },
         endDateTime: { type: "string", description: "End datetime (ISO 8601)" },
-        top: { type: "number", description: "Max events", default: 50 },
+        top: { type: "integer", minimum: 1, maximum: 500, description: "Max events", default: 50 },
       },
     },
   },

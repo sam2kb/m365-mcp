@@ -4,6 +4,7 @@
 
 import type { Contact } from "../types.js";
 import type { GraphClient } from "../graph.js";
+import { normalizeTop } from "../validation.js";
 
 interface ContactLocation {
   folderId?: string;
@@ -144,14 +145,6 @@ const CONTACT_ARRAY_FIELDS = [
 
 function encodeId(id: string): string {
   return encodeURIComponent(id);
-}
-
-function normalizeTop(value: number | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  if (!Number.isInteger(value) || value < 1 || value > 500) {
-    throw new Error("top must be an integer between 1 and 500");
-  }
-  return value;
 }
 
 function normalizePeopleSource(value: PeopleSource | undefined): PeopleSource {

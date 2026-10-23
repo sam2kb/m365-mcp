@@ -32,6 +32,7 @@ function mockFetch(responses: Array<{ status: number; body?: unknown; headers?: 
         const enc = new TextEncoder();
         return enc.encode(String(r.body)).buffer as ArrayBuffer;
       },
+      body: typeof r.body === "string" ? new Response(r.body).body : undefined,
       statusText: r.status === 429 ? "Too Many Requests" : r.status >= 500 ? "Server Error" : "OK",
     } as Response;
   });
@@ -294,7 +295,7 @@ describe("GraphClient", () => {
       expect(content).toBe("hello world");
       expect(fetch).toHaveBeenCalledWith(
         "https://example.com/file.txt",
-        { headers: {} }
+        expect.objectContaining({ headers: {}, signal: expect.any(AbortSignal) })
       );
     });
 
@@ -303,7 +304,7 @@ describe("GraphClient", () => {
       await client.download("https://graph.microsoft.com/v1.0/file.txt");
       expect(fetch).toHaveBeenCalledWith(
         "https://graph.microsoft.com/v1.0/file.txt",
-        { headers: { Authorization: "Bearer fake-token" } }
+        expect.objectContaining({ headers: { Authorization: "Bearer fake-token" } })
       );
     });
 

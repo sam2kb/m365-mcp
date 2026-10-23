@@ -85,8 +85,8 @@ const DESTRUCTIVE_TOOLS = new Set([
 
 const IDEMPOTENT_TOOLS = new Set([
   "m365_mail_mark_read",
-  "m365_calendar_update",
-  "m365_calendar_delete",
+  // Calendar updates can send notifications; delete is an organizer-cancel alias.
+  // Both remain classified as mutating and destructive above.
   "m365_contacts_update",
   "m365_contacts_delete",
   "m365_contacts_folder_update",

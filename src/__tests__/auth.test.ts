@@ -3,6 +3,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as path from "node:path";
+import * as fs from "node:fs";
 
 // ─── mock filesystem ────────────────────────────────────────────────
 
@@ -18,6 +20,12 @@ vi.mock("node:fs", () => ({
   }),
   writeFileSync: vi.fn((p: string, data: string) => {
     fsState.set(p.toString(), data);
+  }),
+  renameSync: vi.fn((source: string, destination: string) => {
+    const content = fsState.get(source);
+    if (content === undefined) throw new Error("ENOENT");
+    fsState.set(destination, content);
+    fsState.delete(source);
   }),
   unlinkSync: vi.fn((p: string) => {
     fsState.delete(p.toString());
@@ -49,7 +57,7 @@ import type { AccountConfig } from "../types.js";
 // ─── helpers ────────────────────────────────────────────────────────
 
 function seedTokens(accountName: string, tokens: { access_token: string; refresh_token: string; expires_at: number; scope: string }) {
-  const tokenPath = `/home/testuser/.m365-mcp/auth/tokens/${accountName}.json`;
+  const tokenPath = getTokenPath(accountName);
   fsState.set(tokenPath, JSON.stringify(tokens));
 }
 
@@ -225,7 +233,7 @@ describe("auth", () => {
     it("returns token when still valid with buffer", async () => {
       addAccount("work", "t1", "c1");
       const future = Date.now() + 30 * 60 * 1000; // 30 min from now
-      seedTokens("work", { access_token: "valid-token", refresh_token: "rt", expires_at: future, scope: "openid" });
+      seedTokens("work", { access_token: "valid-token", refresh_token: "rt", expires_at: future, scope: resolveScopes() });
 
       const token = await getAccessToken("work");
       expect(token).toBe("valid-token");
@@ -340,11 +348,11 @@ describe("auth", () => {
 
   describe("resolveAuthDir", () => {
     it("uses a client-neutral default under the home directory", () => {
-      expect(resolveAuthDir({}, "/home/testuser")).toBe("/home/testuser/.m365-mcp/auth");
+      expect(resolveAuthDir({}, "/home/testuser")).toBe(path.join("/home/testuser", ".m365-mcp", "auth"));
     });
 
     it("honors M365_MCP_AUTH_DIR", () => {
-      expect(resolveAuthDir({ M365_MCP_AUTH_DIR: "/srv/m365-auth" }, "/unused")).toBe("/srv/m365-auth");
+      expect(resolveAuthDir({ M365_MCP_AUTH_DIR: "/srv/m365-auth" }, "/unused")).toBe(path.resolve("/srv/m365-auth"));
     });
   });
 
@@ -374,7 +382,90 @@ describe("auth", () => {
   describe("getTokenPath", () => {
     it("returns path under tokens dir", () => {
       const p = getTokenPath("myaccount");
-      expect(p).toBe("/home/testuser/.m365-mcp/auth/tokens/myaccount.json");
+      expect(p).toBe(path.join("/home/testuser", ".m365-mcp", "auth", "tokens", "myaccount.json"));
     });
+  });
+});
+
+describe("auth lifecycle regressions", () => {
+  beforeEach(() => { fsState.clear(); });
+  afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+
+  it.each(["../other", "a/b", "a\\b", "..", "", "bad:name", "name."])("rejects unsafe account label %s", (name) => {
+    expect(() => addAccount(name, "tenant", "client")).toThrow("Account name");
+  });
+
+  it("invalidates credentials when the tenant/client registration changes", () => {
+    addAccount("work", "tenant-a", "client-a");
+    seedTokens("work", { access_token: "old", refresh_token: "old-refresh", expires_at: Date.now() + 3600000, scope: resolveScopes() });
+    addAccount("work", "tenant-b", "client-b");
+    expect(loadTokens(resolveAccount("work"))).toBeNull();
+  });
+
+  it("preserves credentials for an unchanged registration", () => {
+    addAccount("work", "tenant", "client");
+    seedTokens("work", { access_token: "token", refresh_token: "refresh", expires_at: Date.now() + 3600000, scope: resolveScopes() });
+    addAccount("work", "tenant", "client", undefined, "Updated label");
+    expect(loadTokens(resolveAccount("work"))?.access_token).toBe("token");
+  });
+
+  it("does not overwrite a corrupted account registry", () => {
+    const registry = path.join(resolveAuthDir(), "accounts.json");
+    fsState.set(registry, "{broken");
+    expect(() => addAccount("work", "tenant", "client")).toThrow("Cannot read account registry");
+    expect(fsState.get(registry)).toBe("{broken");
+  });
+
+  it("keeps the previous registry intact if atomic replacement fails", () => {
+    addAccount("work", "tenant", "client");
+    const registry = path.join(resolveAuthDir(), "accounts.json");
+    const before = fsState.get(registry);
+    vi.mocked(fs.renameSync).mockImplementationOnce(() => { throw new Error("disk failure"); });
+    expect(() => addAccount("new", "tenant", "client")).toThrow("disk failure");
+    expect(fsState.get(registry)).toBe(before);
+    expect([...fsState.keys()].some((name) => name.endsWith(".tmp"))).toBe(false);
+  });
+
+  it("requires fresh authentication for cached credentials with missing scopes", async () => {
+    addAccount("work", "tenant", "client");
+    seedTokens("work", { access_token: "old", refresh_token: "refresh", expires_at: Date.now() + 3600000, scope: "User.Read" });
+    await expect(getAccessToken("work")).rejects.toThrow("Permissions changed");
+  });
+
+  it("requests file writes only in write mode and directory access only by opt-in", () => {
+    expect(resolveScopes({})).toContain("Files.ReadWrite");
+    expect(resolveScopes({ M365_MCP_READ_ONLY: "true" })).not.toContain("Files.ReadWrite");
+    expect(resolveScopes({})).not.toContain("User.Read.All");
+    expect(resolveScopes({ M365_MCP_DIRECTORY_READ: "true" })).toContain("User.Read.All");
+  });
+
+  it("re-prompts when a valid cached token lacks requested permissions", async () => {
+    vi.useFakeTimers();
+    addAccount("work", "tenant", "client");
+    seedTokens("work", { access_token: "old", refresh_token: "refresh", expires_at: Date.now() + 3600000, scope: "User.Read" });
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ device_code: "device", user_code: "CODE", verification_uri: "https://microsoft.com/devicelogin", expires_in: 60, interval: 1 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "new", refresh_token: "new-refresh", expires_in: 3600, scope: resolveScopes() })));
+    const prompt = vi.fn();
+    const request = authenticate("work", prompt);
+    await vi.runAllTimersAsync();
+    await expect(request).resolves.toMatchObject({ access_token: "new" });
+    expect(prompt).toHaveBeenCalledOnce();
+  });
+
+  it("increases the polling interval after slow_down", async () => {
+    vi.useFakeTimers();
+    addAccount("work", "tenant", "client");
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ device_code: "device", user_code: "CODE", verification_uri: "https://microsoft.com/devicelogin", expires_in: 60, interval: 1 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "slow_down" }), { status: 400 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "new", refresh_token: "refresh", expires_in: 3600, scope: resolveScopes() })));
+    const request = authenticate("work", vi.fn());
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(5999);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(request).resolves.toMatchObject({ access_token: "new" });
   });
 });

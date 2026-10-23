@@ -5,7 +5,7 @@
 
 **Production-grade Microsoft 365 MCP server** — Email, Calendar, Contacts, OneDrive, Teams, Tasks, and Users via delegated OAuth.
 
-Built from the best of both `office365-connector` (delegated OAuth, multi-account) and `mcp-microsoft365` (MCP protocol, full scope), with all the gaps fixed: pagination, rate limiting, retry logic, proper timezone handling, and TypeScript throughout.
+Combines delegated OAuth and multiple accounts with MCP tools, pagination, rate-limit handling, timezone-aware calendars, and TypeScript.
 
 ## Why this exists
 
@@ -42,14 +42,14 @@ the storage and revocation details.
 
 ## Scope
 
-**Delegated permissions** — the app acts AS YOU, not as the tenant. It can only access YOUR data:
+The app uses delegated permissions. Microsoft Graph limits access to the granted scopes and what the signed-in user can access, including shared resources where permitted.
 
 - `Mail.Read` / `Mail.ReadWrite` / `Mail.Send`
 - `Calendars.Read` / `Calendars.ReadWrite`
 - `Contacts.Read` / `Contacts.ReadWrite`
 - `People.Read` (relevance-ranked people search)
-- `Files.Read.All` (your OneDrive)
-- `Tasks.ReadWrite` (To Do)
+- `Files.Read.All` / `Files.ReadWrite` (read accessible files and create folders in your drive)
+- `Tasks.Read` / `Tasks.ReadWrite` (To Do)
 - `Chat.Read` / `Chat.ReadWrite` (Teams)
 - `User.Read` + `offline_access`
 
@@ -91,6 +91,8 @@ Contacts.Read
 Contacts.ReadWrite
 People.Read
 Files.Read.All
+Files.ReadWrite
+Tasks.Read
 Tasks.ReadWrite
 Chat.Read
 Chat.ReadWrite
@@ -98,7 +100,7 @@ Chat.ReadWrite
 
 Click **Grant admin consent** (or each user will consent individually during login).
 
-> Organization-wide user listing and lookup additionally requires delegated `User.Read.All` with admin consent. This broader scope is not requested by default.
+> Organization-wide user listing and lookup require delegated `User.Read.All` with admin consent. To use these tools, add that permission to the registration and set `M365_MCP_DIRECTORY_READ=true` during authentication and server startup. This broader scope is off by default.
 
 ### 3. Install
 
@@ -203,6 +205,10 @@ node dist/auth-cli.js list
 
 Each account needs its own App Registration in its respective tenant. Tokens are isolated per account.
 
+Changing an account's tenant or client ID clears that account's cached tokens.
+Sign in again after changing permissions or the read-only/directory settings.
+Login checks cached permissions before reusing a token.
+
 ## Available Tools (46)
 
 ### 📧 Mail (9 tools)
@@ -269,6 +275,9 @@ Outlook Contact Lists or their membership.
 | `m365_files_info` | File/folder metadata |
 | `m365_files_create_folder` | Create folder |
 
+Text reads default to 50,000 bytes and accept `maxBytes` from 0 to 1,000,000.
+The downloader stops reading at that limit, including when the server returns a larger file.
+
 ### 💬 Teams (3 tools)
 | Tool | Description |
 |---|---|
@@ -293,6 +302,8 @@ Outlook Contact Lists or their membership.
 | `m365_users_manager` | Get user's manager |
 
 ## Development
+
+Use Node.js 20 or later for the development test runner. CI tests on Linux and Windows with Node.js 24.
 
 ```bash
 npm install
@@ -319,7 +330,11 @@ npm run build  # compile TypeScript
   by `0700` directories and `0600` files where supported. Protect
   `~/.m365-mcp/auth/` or your configured `M365_MCP_AUTH_DIR`.
 - **Auto-refresh** — tokens refreshed before expiry, expired refresh tokens trigger re-auth.
-- **No telemetry, no analytics, no third-party calls** besides `login.microsoftonline.com` and `graph.microsoft.com`.
+- **Network destinations** — OAuth uses `login.microsoftonline.com`; API calls use `graph.microsoft.com`. File reads also follow HTTPS download URLs supplied by Graph, such as OneDrive and SharePoint URLs. The Graph bearer token is attached only to Graph-origin requests. The server has no telemetry or analytics.
+
+Reads retry temporary failures and honor `Retry-After` for 429 and 503 responses.
+Writes retry explicit throttling responses, but connection failures or server errors
+can leave their outcome uncertain. Check the target before trying those writes again.
 
 To delete a local token, remove its account:
 
